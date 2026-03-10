@@ -1,0 +1,312 @@
+@import "tailwindcss";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  border: 1px solid red !important;
+}
+
+:root {
+  /* --c1: #e11d48; */
+  --c1: #2563eb;
+  --c1Light: hsl(from var(--c1) h s calc(l * 1.1));
+  --c1Dark: hsl(from var(--c1) h s calc(l * 0.5));
+
+  --c2: #f2dcb1;
+  --c5: #f00;
+
+
+  /* used with outlines/borders */
+  --shade1: #000000;
+  --shade2: #e1e1e1;
+  --shade3: #494949;
+
+  /* text colors - can swap */
+  --textC1: #000000;
+  --textC2: #ffffff;
+  /* light/dark swap  */
+  --textSC1: var(--textC1);
+
+  --bg1: #ffc996;
+  --bg2: #ffffff;
+
+  --sizeEEL: 6rem;
+  --sizeEL: 4rem;
+  --sizeLEL: 2.5rem;
+  --sizeL: 2rem;
+  --sizeM: 1.5rem;
+  --sizeR: 1rem;
+  --sizeS: .7rem;
+
+  --fontSizeTitle: clamp(2rem, 4vw, 3.5rem);
+  --fontSizeL: clamp(1.7rem, 3vw, 2.5rem);
+  --fontSizeM: clamp(1.5rem, 3vw, 2.25rem);
+  --fontSizeR: 1rem;
+  --fontSizeS: .7rem;
+
+  --spacingEL: 5rem;
+  --spacingL: 2rem;
+  --spacingM: 1.3rem;
+  --spacingR: 1rem;
+  --spacingS: .5rem;
+  --spacingES: .2rem;
+
+  --borderRadiusEL: 50%;
+  --borderRadiusL: 2rem;
+  --borderRadiusR: 1rem;
+  --borderRadiusS: 0.5rem;
+  --borderRadiusES: 0.2rem;
+
+  --transitionTimeR: 400ms;
+  --transitionTimeS: 200ms;
+
+  --animationTimeR: 400ms;
+  --animationTimeS: 200ms;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: black;
+}
+
+*::-webkit-scrollbar {
+  height: .2rem;
+  width: .2rem;
+}
+
+*::-webkit-scrollbar-track {
+  background-color: white,
+}
+
+html {
+  scroll-behavior: smooth;
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  height: 100%;
+  overflow: auto;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  align-content: flex-start;
+  background-color: var(--bg2);
+  font-size: var(--fontSizeR);
+  color: var(--textC1);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+main {
+  display: grid;
+  align-content: flex-start;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--textC1);
+}
+
+h1 {
+  font-size: var(--fontSizeL);
+}
+
+h2 {
+  font-size: var(--fontSizeM);
+}
+
+h3 {
+  font-size: var(--fontSizeR);
+}
+
+p {
+  font-size: var(--fontSizeR);
+  line-height: 1.7;
+  color: var(--textC1);
+  max-width: 65ch;
+}
+
+svg {
+  aspect-ratio: 1/1;
+  width: var(--sizeR);
+  height: var(--sizeR);
+}
+
+form {
+  display: grid;
+  align-content: flex-start;
+  gap: var(--spacingR);
+  padding: var(--spacingR);
+  overflow: auto;
+}
+
+label {
+  text-transform: capitalize;
+  font-weight: bold;
+  font-size: var(--fontSizeR);
+}
+
+input,
+textarea {
+  padding: var(--spacingR);
+  background-color: var(--bg2);
+  color: var(--textC1);
+  border-radius: var(--borderRadiusS);
+  border: 1px solid var(--shade3);
+}
+
+input:focus,
+textarea:focus {
+  border: 1px solid var(--shade1);
+  outline: none;
+}
+
+input::placeholder,
+textarea::placeholder {
+  text-transform: capitalize;
+}
+
+input[type="checkbox"] {
+  cursor: pointer;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* custom classes */
+.icon {
+  transition: scale var(--animationTimeR);
+  margin: var(--spacingES);
+  cursor: pointer;
+}
+
+.icon:hover {
+  scale: 1.1;
+}
+
+
+
+
+.button1 {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: flex-start;
+  gap: 0.5rem;
+
+  padding: 0.75rem 1.25rem;
+  border-radius: var(--borderRadiusS);
+  border: none;
+
+  background-color: var(--c1);
+  color: var(--textC2);
+  font-weight: 500;
+  font-size: var(--fontSizeR);
+  text-transform: capitalize;
+
+  cursor: pointer;
+  transition: var(--transitionTimeR);
+}
+
+.button1:hover,
+.button1:active {
+  background: var(--c1Light);
+}
+
+.button2 {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: flex-start;
+  text-transform: capitalize;
+  padding: 0.5rem 1rem;
+  border-radius: var(--borderRadiusS);
+  background: var(--bg2);
+  border: 1px solid var(--shade1);
+  color: var(--textC1);
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transitionTimeR);
+  font-size: var(--fontSizeS);
+}
+
+.button2:hover {
+  background: var(--shade2);
+}
+
+
+
+
+.snap {
+  scroll-snap-type: x mandatory;
+}
+
+.snap>* {
+  scroll-snap-align: start;
+}
+
+
+
+
+.simpleFlex {
+  display: flex;
+  align-items: center;
+  gap: var(--spacingS);
+  flex-wrap: wrap;
+}
+
+.simpleContainer {
+  display: grid;
+  align-content: flex-start;
+  gap: var(--spacingR);
+  padding: var(--spacingR);
+  border: 1px solid var(--shade1);
+  border-radius: var(--borderRadiusR);
+}
+
+.simpleGrid {
+  display: grid;
+  align-content: flex-start;
+}
+
+.gridColumn {
+  display: grid;
+  align-content: flex-start;
+  grid-auto-flow: column;
+  gap: var(--spacingR);
+  grid-auto-columns: min(350px, 100%);
+  overflow: auto;
+}
+
+
+
+
+.errorText {
+  color: var(--c5);
+  font-size: var(--fontSizeS);
+}
+
+
+
+
+.highlight {
+  background-color: red !important;
+}

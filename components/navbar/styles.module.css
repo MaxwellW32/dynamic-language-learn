@@ -1,0 +1,19 @@
+.moreItemsMenu {
+    padding: var(--spacingS);
+    display: grid;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    width: min(300px, 100vw);
+    background-color: var(--bg2);
+}
+
+.moreItemsMenu>li {
+    padding: .5rem;
+    transition: color 400ms, background-color 400ms;
+    cursor: pointer;
+}
+
+.moreItemsMenu>li:hover {
+    background-color: hsl(from var(--bg2) h s calc(l - 5))
+}

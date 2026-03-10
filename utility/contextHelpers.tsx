@@ -1,0 +1,225 @@
+import { areaConnectionType, areaType, bookType, chapterType, characterType, locationSchema, locationType } from "@/types"
+
+export function getImportantCharacters(book: bookType) {
+    const importantCharacters: characterType[] = []
+
+    //get player
+    const foundPlayer = getPlayer(book)
+    if (foundPlayer === undefined) throw new Error("not seeing player")
+    if (foundPlayer.location.type === "withPlayer") throw new Error("player location can't be 'with player'")
+
+    //add player
+    importantCharacters.push(foundPlayer)
+
+    //get companions
+    const charactersWithPlayer = book.characters.filter(eachCharacter => eachCharacter.location.type === "withPlayer")
+    //add companions
+    importantCharacters.push(...charactersWithPlayer)
+
+    //get characters in same area
+    const otherCharactersInSameArea = book.characters.filter(eachCharacter => {
+        if (foundPlayer.location.type === "withPlayer") throw new Error("player location can't be 'with player'")
+
+        //match same area id - ensure not player
+        if (eachCharacter.location.type === "area" && eachCharacter.location.areaId === foundPlayer.location.areaId && eachCharacter.id !== foundPlayer.id) {
+            return true
+        }
+
+        return false
+    })
+
+    //add other characters
+    importantCharacters.push(...otherCharactersInSameArea)
+
+    return importantCharacters
+}
+
+export function getImportantLocations(book: bookType, currentAreaId: areaType["id"]) {
+    const areaIdsConnected: areaType["id"][] = []
+
+    book.areaConnections.map(eachAreaConnection => {
+        if (eachAreaConnection.firstId === currentAreaId) {
+            areaIdsConnected.push(eachAreaConnection.secondId)
+        } else if (eachAreaConnection.secondId === currentAreaId) {
+            areaIdsConnected.push(eachAreaConnection.firstId)
+        }
+    })
+
+    //add on og
+    const allRelevantAreaIds = [...areaIdsConnected, currentAreaId]
+
+    //filter locations/places/areas
+    const relevantLocations: locationType[] = book.locations
+        .map(eachLocation => {
+            const filteredPlaces = eachLocation.places
+                .map(eachPlace => {
+                    const filteredAreas = eachPlace.areas.filter(eachArea => allRelevantAreaIds.includes(eachArea.id))
+
+                    if (filteredAreas.length === 0) return null
+
+                    return {
+                        ...eachPlace,
+                        areas: filteredAreas
+                    }
+                })
+                .filter(Boolean)
+
+            if (filteredPlaces.length === 0) return null
+
+            return {
+                ...eachLocation,
+                places: filteredPlaces
+            }
+        })
+        .filter(Boolean).map(eachPre => {
+            return locationSchema.parse(eachPre)
+        })
+
+    return relevantLocations
+}
+
+export function getConnectedAreaIds(book: bookType, currentAreaId: areaType["id"]) {
+    const areaIdsConnected: areaType["id"][] = []
+
+    book.areaConnections.map(eachAreaConnection => {
+        if (eachAreaConnection.firstId === currentAreaId) {
+            areaIdsConnected.push(eachAreaConnection.secondId)
+        } else if (eachAreaConnection.secondId === currentAreaId) {
+            areaIdsConnected.push(eachAreaConnection.firstId)
+        }
+    })
+
+    return areaIdsConnected
+}
+
+export function getRelevantAreaConnections(book: bookType, relevantAreaIds: areaType["id"][]) {
+    // console.log(`$relevantAreaIds`, relevantAreaIds);
+
+    const relevantAreaConnections = book.areaConnections.filter(eachAreaConnection => relevantAreaIds.includes(eachAreaConnection.firstId) || relevantAreaIds.includes(eachAreaConnection.secondId))
+
+    // console.log(`$relevantAreaConnections`, relevantAreaConnections);
+    return relevantAreaConnections
+}
+
+export function getRelevantGoals(book: bookType, goalLimit: number, subGoalLimit: number) {
+    const latestGoalIndex = book.goals.findIndex(eachGoal => !eachGoal.complete)
+    const relevantGoals = book.goals.filter((eachGoal, eachGoalIndex) => {
+        if (latestGoalIndex !== -1) {
+            if (eachGoalIndex >= latestGoalIndex && eachGoalIndex <= latestGoalIndex + goalLimit) {
+                return true
+            }
+        }
+
+        return false
+    }).map((eachGoal, eachGoalIndex) => {
+        //return only next 3 sub goals - no sub goals at all - just next goal
+        //if each goal index is not chosen dont return it
+
+        //react
+        eachGoal = { ...eachGoal }
+
+        const latestSubGoalIndex = eachGoal.subGoals.findIndex((eachsubGoal) => !eachsubGoal.complete)
+
+        const relevantSubGoals = eachGoal.subGoals.filter((eachSubGoal, eachSubGoalIndex) => {
+            if (latestSubGoalIndex !== -1) {//gets 7 sub goals
+                if (eachSubGoalIndex >= latestSubGoalIndex && eachSubGoalIndex <= latestSubGoalIndex + subGoalLimit) {
+                    return true
+                }
+            }
+
+            return false
+        })
+
+        //assign new subGoals - only for active goal, rest are empty
+        eachGoal.subGoals = eachGoalIndex === 0 ? relevantSubGoals : []
+
+        return eachGoal
+    })
+
+    return relevantGoals
+}
+
+export function getRelevantSections(eachChapter: chapterType, chapters: chapterType[], MAX: number) {
+    // 1. Get current chapter sections (up to 3)
+    const currentSections = eachChapter.sections.slice(-MAX);
+
+    // 2. If we already have 3, return
+    if (currentSections.length === MAX) {
+        return currentSections;
+    }
+
+    // 3. Find previous chapter (by index)
+    const currentChapterIndex = chapters.findIndex((c) => c.id === eachChapter.id);
+    if (currentChapterIndex === -1) {
+        return currentSections;
+    }
+
+    //get prev chapter
+    const previousChapter = chapters[currentChapterIndex - 1];
+    if (previousChapter === undefined || previousChapter.sections.length === 0) {
+        return currentSections;
+    }
+
+    // 4. Calculate how many more we need
+    const remainingNeeded = MAX - currentSections.length;
+
+    const previousSections = previousChapter.sections.slice(-remainingNeeded);
+
+    // 5. Combine in correct chronological order
+    return [...previousSections, ...currentSections];
+}
+
+
+
+
+export function ensurePlayer(book: bookType) {
+    const foundPlayer = getPlayer(book)
+    if (foundPlayer === undefined) throw new Error("not seeing player")
+
+    return foundPlayer
+}
+export function getPlayer(book: bookType) {
+    return book.characters.find(eachCharacter => eachCharacter.type === "player")
+}
+export function getPlayerArea(book: bookType, playerCharacter: characterType) {
+    if (playerCharacter.type !== "player") throw new Error("not a player")
+    if (playerCharacter.location.type === "withPlayer") throw new Error("player can't be with player")
+
+    const seenPlayerAreaId = playerCharacter.location.areaId
+
+    let foundArea: areaType | undefined = undefined
+
+    book.locations.map(eachL => {
+        eachL.places.map(eachP => {
+            eachP.areas.map(eachA => {
+                if (eachA.id === seenPlayerAreaId) {
+                    foundArea = eachA
+                }
+            })
+        })
+    })
+
+    return foundArea
+}
+export function getLinkedAreaConnections(book: bookType, currentAreaId: areaType["id"]) {
+    const linkedAreaConnections: areaConnectionType[] = book.areaConnections.filter(eachAreaConnection => {
+        return eachAreaConnection.firstId === currentAreaId || eachAreaConnection.secondId === currentAreaId
+    })
+
+    return linkedAreaConnections
+}
+export function getAreaFromId(book: bookType, areaId: areaType["id"]): areaType | undefined {
+    let foundArea: areaType | undefined = undefined
+
+    book.locations.map(eachL => {
+        eachL.places.map(eachP => {
+            eachP.areas.map(eachA => {
+                if (eachA.id === areaId) {
+                    foundArea = eachA
+                }
+            })
+        })
+    })
+
+    return foundArea
+}
