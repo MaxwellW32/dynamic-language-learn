@@ -3,9 +3,9 @@ import { showingLanguageSelectionGlobal } from '@/utility/globalState'
 import { useAtom } from 'jotai'
 import { Session } from 'next-auth'
 import { useEffect } from 'react'
-import ChooseLanguage from './ChooseLanguage'
+import LanguageSelector from './LanguageSelector'
 
-export default function ChooseLanguageDetector({ session }: { session: Session | null }) {
+export default function DetectLanguageTargets({ session }: { session: Session | null }) {
     const [showingLanguageSelection, showingLanguageSelectionSet] = useAtom(showingLanguageSelectionGlobal)
 
     //open if no targets
@@ -22,7 +22,7 @@ export default function ChooseLanguageDetector({ session }: { session: Session |
 
     return (
         <>
-            {showingLanguageSelection && <ChooseLanguage session={session} />}
+            {showingLanguageSelection && <LanguageSelector session={session} />}
         </>
     )
 }

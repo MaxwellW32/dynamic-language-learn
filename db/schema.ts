@@ -1,7 +1,7 @@
 import { relations } from "drizzle-orm";
 import { boolean, timestamp, pgTable, text, primaryKey, integer, index, json } from "drizzle-orm/pg-core"
 import type { AdapterAccountType } from "@auth/core/adapters"
-import { areaConnectionType, characterType, goalType, locationType, sectionType, userType } from "@/types";
+import { areaConnectionType, bookType, characterType, goalType, locationType, sectionType, userType } from "@/types";
 import { defaultText } from "@/lib/defaultData";
 
 export const users = pgTable("users", {
@@ -11,7 +11,7 @@ export const users = pgTable("users", {
         native: { name: "english", dialect: "american" },
         targets: [],
     }).notNull(),
-    wordProgress: json("wordProgress").$type<userType["wordProgress"]>().default({}).notNull(),
+    lessonProgress: json("lessonProgress").$type<userType["lessonProgress"]>().default({}).notNull(),
 
     //regular
 
@@ -32,6 +32,7 @@ export const books = pgTable("books", {
     id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
     dateCreated: timestamp("dateCreated", { mode: "date" }).notNull().defaultNow(),
     name: text("name").notNull().default(defaultText),
+    targetLanguages: json("targetLanguages").$type<bookType["targetLanguages"][]>().default([]).notNull(),
     readyToRead: boolean("readyToRead").notNull().default(false),
     storyPremise: text("storyPremise").notNull().default(defaultText),
     locations: json("locations").$type<locationType[]>().default([]).notNull(),

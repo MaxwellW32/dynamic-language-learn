@@ -1,11 +1,11 @@
 "use client"
 import styles from "./style.module.css"
-import { areaConnectionType, areaType, bookSchema, bookType, chapterType, characterType, gptApiFunctionCallOptionType, locationType, makeCharactersBodySchema, makeCharactersBodyType, makeCharactersResponseSchema, makeGoalsBodySchema, makeGoalsBodyType, makeGoalsResponseSchema, makeLocationsBodySchema, makeLocationsBodyType, makeLocationsResponseSchema, makeStoryPremiseBodySchema, makeStoryPremiseBodyType, makeStoryPremiseResponseSchema, placeType, promptInfoType } from '@/types'
+import { areaConnectionType, areaType, bookSchema, bookType, chapterType, characterType, gptApiFunctionCallOptionType, languageLessonType, locationType, makeCharactersBodySchema, makeCharactersBodyType, makeCharactersResponseSchema, makeGoalsBodySchema, makeGoalsBodyType, makeGoalsResponseSchema, makeLocationsBodySchema, makeLocationsBodyType, makeLocationsResponseSchema, makeStoryPremiseBodySchema, makeStoryPremiseBodyType, makeStoryPremiseResponseSchema, placeType, promptInfoType, userType } from '@/types'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import ShowMore from '../showMore/ShowMore'
 import EditPromptInfo from '../promptInfo/EditPromptInfo'
 import TextArea from '../inputs/textArea/TextArea'
-import { fixBook, updateBook } from '@/serverFunctions/handleBooks'
+import { updateBook } from '@/serverFunctions/handleBooks'
 import { consoleAndToastError } from '@/utility/consoleErrorWithToast'
 import TextInput from '../inputs/textInput/TextInput'
 import toast from 'react-hot-toast'
@@ -14,12 +14,15 @@ import ViewChapters from "../chapters/ViewChapters"
 import ViewLocations from "./ViewLocations"
 import ViewGoalsSubGoals from "./ViewGoalsSubGoals"
 import { defaultText } from "@/lib/defaultData"
+import { makeNativeTargetKey } from "@/utility/contextHelpers"
 
-export default function ReadBook({ seenBook }: { seenBook: bookType }) {
+export default function ReadBook({ seenUser, seenBook }: { seenUser: userType, seenBook: bookType }) {
     const { rateLimit: makeLocationPlacesRateLimit } = UseRateLimit({})
     const { rateLimit: makePlaceAreasRateLimit } = UseRateLimit({})
 
+    const [user, userSet] = useState({ ...seenUser })
     const [book, bookSet] = useState({ ...seenBook })
+    const [languageLessons, languageLessonsSet] = useState<{ [key: string]: languageLessonType }>({})
     const [neededSimulatedConnections, neededSimulatedConnectionsSet] = useState<areaConnectionType[]>([])
     const [showingSetupMenu, showingSetupMenuSet] = useState(!book.readyToRead)
     const [showingSideMenu, showingSideMenuSet] = useState(false)
@@ -119,13 +122,24 @@ Example:
     }) !== undefined
 
     //validation checks
+    const targetLanguagesValid = useMemo(() => {
+        return checkTargetLanguagesValid()
+    }, [book.targetLanguages])
     const storyPremiseValid = useMemo(() => {
         return checkStoryPremiseValid()
     }, [book.storyPremise, book.name])
     const [locationsValid, locationsValidSet] = useState<boolean | undefined>(undefined)
     const [charactersValid, charactersValidSet] = useState<boolean | undefined>(undefined)
     const [goalsValid, goalsValidSet] = useState<boolean | undefined>(undefined)
-    const storyValid = storyPremiseValid && locationsValid && charactersValid && goalsValid
+    const storyValid = targetLanguagesValid && storyPremiseValid && locationsValid && charactersValid && goalsValid
+
+    //respond to changes above - user
+    useEffect(() => {
+        userSet({ ...seenUser })
+
+        console.log(`$ran here - user`)
+
+    }, [seenUser])
 
     //sync book to server
     useEffect(() => {
@@ -163,10 +177,47 @@ Example:
 
     }, [syncBookToServerKeys])
 
+    //load languageLessons
+    useEffect(() => {
+        //if native language or target languages change refresh
+        const search = async () => {
+            try {
+                await Promise.all(book.targetLanguages.map(async eachTargetLanguage => {
+                    const seenNativeTargetKey = makeNativeTargetKey(user.languageSettings.native, eachTargetLanguage)
+
+                    //get dictionary
+                    const dictionaryRes = await fetch(`/languageLessons/${seenNativeTargetKey}/dictionary.json`)
+                    const seenDictionary = await dictionaryRes.json()
+
+                    //get grammar lessons
+                    const grammarRes = await fetch(`/languageLessons/${seenNativeTargetKey}/grammar.json`)
+                    const seenGrammar = await grammarRes.json()
+
+                    languageLessonsSet(prevLanguageLessons => {
+                        const newLanguageLessons = { ...prevLanguageLessons }
+
+                        newLanguageLessons[seenNativeTargetKey] = {
+                            dictionary: seenDictionary,
+                            grammar: seenGrammar
+                        }
+
+                        return newLanguageLessons
+                    })
+                }))
+
+            } catch (error) {
+                consoleAndToastError(error)
+            }
+        }
+        search()
+
+    }, [user.languageSettings.native, book.targetLanguages])
+
     //check book valid on launch
     useEffect(() => {
         let storyValidLocal = true
 
+        if (!checkTargetLanguagesValid()) storyValidLocal = false
         if (!checkStoryPremiseValid()) storyValidLocal = false
         if (!checkLocationsValid(false)) storyValidLocal = false
         if (!checkCharactersValid(false)) storyValidLocal = false
@@ -185,8 +236,6 @@ Example:
             //sync to server
             syncBookToServerKeysSet(["readyToRead"])
         }
-
-        console.log(`$storyValidLocal`, storyValidLocal);
     }, [])
 
     //check side menu
@@ -254,8 +303,17 @@ Example:
     }
 
     //validation functions
+    function checkTargetLanguagesValid() {
+        return book.targetLanguages.length > 0
+    }
     function checkStoryPremiseValid() {
-        if (book.storyPremise === "" || book.name === "" || book.storyPremise === defaultText || book.name === defaultText) {
+        //parse storypremise and name
+        const storyPremiseCheck = bookSchema.shape.storyPremise.safeParse(book.storyPremise)
+        if (storyPremiseCheck.error !== undefined) return false
+        const nameCheck = bookSchema.shape.name.safeParse(book.name)
+        if (nameCheck.error !== undefined) return false
+
+        if (book.storyPremise === defaultText || book.name === defaultText) {
             return false
         }
 
@@ -564,12 +622,19 @@ Example:
             return false
         }
     }
+    console.log(`$languageLessons`, languageLessons)
 
     return (
         <main style={{ display: "grid", position: "relative", zIndex: 0, overflow: "auto", }}>
             <div style={{ display: showingSetupMenu ? "grid" : "none", alignContent: "flex-start", position: "absolute", top: 0, left: 0, bottom: 0, right: 0, backgroundColor: "var(--bg2)", zIndex: 2, padding: "var(--spacingR)", gap: "var(--spacingR)", overflow: "auto" }}>
                 <button style={{ justifySelf: "flex-end" }}
                     onClick={() => {
+                        if (!storyValid) {
+                            toast.error("please complete story setup")
+
+                            return
+                        }
+
                         showingSetupMenuSet(false)
                     }}
                 >
@@ -580,10 +645,42 @@ Example:
 
                 <ShowMore
                     label='Language Selection'
-                    startShowing={true}
+                    startShowing={book.targetLanguages.length === 0}
                     content={(
                         <div className="simpleGrid">
+                            <p>Please select target language(s)</p>
 
+                            <div className="simpleFlex">
+                                {user.languageSettings.targets.map(eachUserLanguageTarget => {
+                                    const selected = book.targetLanguages.find(eachTargetLanguageMap => eachTargetLanguageMap.name === eachUserLanguageTarget.name && eachTargetLanguageMap.dialect === eachUserLanguageTarget.dialect)
+
+                                    return (
+                                        <button key={eachUserLanguageTarget.name} className="button2" style={{ backgroundColor: selected ? "var(--c1)" : "" }}
+                                            onClick={() => {
+                                                //asign change locally
+                                                bookSet(prevBook => {
+                                                    const newBook = { ...prevBook }
+
+                                                    const inArr = newBook.targetLanguages.find(eachTargetLanguageMap => eachTargetLanguageMap.name === eachUserLanguageTarget.name && eachTargetLanguageMap.dialect === eachUserLanguageTarget.dialect)
+
+                                                    if (inArr) {
+                                                        newBook.targetLanguages = newBook.targetLanguages.filter(eachTargetLanguageFilter => !(eachTargetLanguageFilter.name === eachUserLanguageTarget.name && eachTargetLanguageFilter.dialect === eachUserLanguageTarget.dialect))
+                                                    } else {
+                                                        newBook.targetLanguages = [...newBook.targetLanguages, eachUserLanguageTarget]
+                                                    }
+
+                                                    return newBook
+                                                })
+
+                                                //sync to server
+                                                syncBookToServerKeysSet(["targetLanguages"])
+                                            }}
+                                        >
+                                            <p>{eachUserLanguageTarget.name}{eachUserLanguageTarget.dialect !== undefined && (<b> {eachUserLanguageTarget.dialect}</b>)}</p>
+                                        </button>
+                                    )
+                                })}
+                            </div>
                         </div>
                     )}
                 />

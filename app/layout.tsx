@@ -5,7 +5,7 @@ import { SessionProvider } from "next-auth/react";
 import { Toaster } from "react-hot-toast";
 import { auth } from "@/auth/auth";
 import Navbar from "@/components/navbar/Navbar";
-import ChooseLanguageDetector from "@/components/chooseLanguage/ChooseLanguageDetector";
+import DetectLanguageTargets from "@/components/languageSelector/DetectLanguageTargets";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -37,7 +37,7 @@ export default async function RootLayout({
         <SessionProvider session={session}>
           <Toaster position="top-center" reverseOrder={false} />
           <Navbar session={session} />
-          <ChooseLanguageDetector session={session} />
+          <DetectLanguageTargets session={session} />
 
           {children}
         </SessionProvider>

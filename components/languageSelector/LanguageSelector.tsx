@@ -4,41 +4,41 @@ import styles from "./style.module.css"
 import { Session } from "next-auth"
 import { useState } from "react"
 import { languageOptions } from "@/lib/languages"
-import { languageOptionChosenType, userType } from "@/types"
+import { chosenLanguageOptionType, userType } from "@/types"
 import { updateUser } from "@/serverFunctions/handleUsers"
 import toast from "react-hot-toast"
 import { useAtom } from "jotai"
 import { showingLanguageSelectionGlobal } from "@/utility/globalState"
 import { useRouter } from "next/navigation"
 
-export default function ChooseLanguage({ session }: { session: Session }) {
+export default function LanguageSelector({ session }: { session: Session }) {
     const router = useRouter()
 
     const [showingLanguageSelection, showingLanguageSelectionSet] = useAtom(showingLanguageSelectionGlobal)
     const [userLanguageSettings, userLanguageSettingsSet] = useState<userType["languageSettings"]>(session.user.languageSettings)
 
-    function setNative(language: languageOptionChosenType) {
+    function setNativeLanguage(languageOptionChosen: chosenLanguageOptionType) {
         userLanguageSettingsSet(prev => ({
             ...prev,
-            native: language
+            native: languageOptionChosen
         }))
     }
 
-    function toggleTarget(language: languageOptionChosenType) {
+    function toggleTarget(languageOptionChosen: chosenLanguageOptionType) {
         userLanguageSettingsSet(prev => {
             const exists = prev.targets.find(
-                t => t.name === language.name && t.dialect === language.dialect
+                t => t.name === languageOptionChosen.name && t.dialect === languageOptionChosen.dialect
             )
 
             let updatedTargets
 
             if (exists) {
                 updatedTargets = prev.targets.filter(
-                    t => !(t.name === language.name && t.dialect === language.dialect)
+                    t => !(t.name === languageOptionChosen.name && t.dialect === languageOptionChosen.dialect)
                 )
 
             } else {
-                updatedTargets = [...prev.targets, language]
+                updatedTargets = [...prev.targets, languageOptionChosen]
             }
 
             return {
@@ -83,7 +83,7 @@ export default function ChooseLanguage({ session }: { session: Session }) {
                                         {eachLanguageOption.dialects === undefined ? (
                                             <>
                                                 <button className={userLanguageSettings.native.name === eachLanguageOption.name ? styles.selected : ""}
-                                                    onClick={() => setNative({ name: eachLanguageOption.name })}
+                                                    onClick={() => setNativeLanguage({ name: eachLanguageOption.name })}
                                                 >
                                                     {eachLanguageOption.name}
                                                 </button>
@@ -101,7 +101,7 @@ export default function ChooseLanguage({ session }: { session: Session }) {
                                                                 key={eachDialect}
                                                                 className={selected ? styles.selected : ""}
                                                                 onClick={() =>
-                                                                    setNative({
+                                                                    setNativeLanguage({
                                                                         name: eachLanguageOption.name,
                                                                         dialect: eachDialect
                                                                     })

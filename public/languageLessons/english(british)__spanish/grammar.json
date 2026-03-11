@@ -1,0 +1,62 @@
+{
+  "1": {
+    "title": "Subject + ser",
+    "description": "Basic identity sentence using 'ser'. Example: Yo soy estudiante (I am a student)."
+  },
+  "2": {
+    "title": "Subject + estar",
+    "description": "Used for temporary states or locations. Example: Estoy cansado (I am tired)."
+  },
+  "3": {
+    "title": "Ser vs Estar",
+    "description": "Ser for permanent traits, estar for temporary conditions."
+  },
+  "4": {
+    "title": "Subject + tener",
+    "description": "Express possession or states. Example: Tengo hambre (I am hungry)."
+  },
+  "5": {
+    "title": "Subject + verb",
+    "description": "Basic present tense structure. Example: Yo como (I eat)."
+  },
+  "6": {
+    "title": "Verb conjugation -ar",
+    "description": "Present tense for -ar verbs. Example: hablar → hablo, hablas, habla."
+  },
+  "7": {
+    "title": "Verb conjugation -er",
+    "description": "Present tense for -er verbs. Example: comer → como, comes, come."
+  },
+  "8": {
+    "title": "Verb conjugation -ir",
+    "description": "Present tense for -ir verbs. Example: vivir → vivo, vives, vive."
+  },
+  "9": {
+    "title": "Question formation",
+    "description": "Spanish questions often rely on tone or punctuation. Example: ¿Hablas español?"
+  },
+  "10": {
+    "title": "Negation with no",
+    "description": "Place 'no' before a verb. Example: No como carne (I do not eat meat)."
+  },
+  "11": {
+    "title": "Articles el / la / los / las",
+    "description": "Definite articles for gender and number."
+  },
+  "12": {
+    "title": "Adjective agreement",
+    "description": "Adjectives match gender and number. Example: gato negro, casa negra."
+  },
+  "13": {
+    "title": "Hay",
+    "description": "Means 'there is / there are'. Example: Hay un perro (there is a dog)."
+  },
+  "14": {
+    "title": "Ir a + verb",
+    "description": "Used for future plans. Example: Voy a comer (I am going to eat)."
+  },
+  "15": {
+    "title": "Gustar",
+    "description": "Used to express liking. Example: Me gusta el pan (I like bread)."
+  }
+}

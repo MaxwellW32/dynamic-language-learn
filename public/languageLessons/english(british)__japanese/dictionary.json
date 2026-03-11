@@ -1,0 +1,502 @@
+{
+    "1": {
+        "word": "食べる",
+        "mng": "to eat",
+        "prnc": "ta-be-ru"
+    },
+    "2": {
+        "word": "飲む",
+        "mng": "to drink",
+        "prnc": "no-mu"
+    },
+    "3": {
+        "word": "行く",
+        "mng": "to go",
+        "prnc": "i-ku"
+    },
+    "4": {
+        "word": "見る",
+        "mng": "to see",
+        "prnc": "mi-ru"
+    },
+    "5": {
+        "word": "話す",
+        "mng": "to speak",
+        "prnc": "ha-na-su"
+    },
+    "6": {
+        "word": "聞く",
+        "mng": "to listen",
+        "prnc": "ki-ku"
+    },
+    "7": {
+        "word": "食べ物",
+        "mng": "food",
+        "prnc": "ta-be-mo-no"
+    },
+    "8": {
+        "word": "水",
+        "mng": "water",
+        "prnc": "mi-zu"
+    },
+    "9": {
+        "word": "友達",
+        "mng": "friend",
+        "prnc": "to-mo-da-chi"
+    },
+    "10": {
+        "word": "家",
+        "mng": "house",
+        "prnc": "ie"
+    },
+    "11": {
+        "word": "人",
+        "mng": "person",
+        "prnc": "hi-to"
+    },
+    "12": {
+        "word": "男",
+        "mng": "man",
+        "prnc": "o-to-ko"
+    },
+    "13": {
+        "word": "女",
+        "mng": "woman",
+        "prnc": "on-na"
+    },
+    "14": {
+        "word": "子供",
+        "mng": "child",
+        "prnc": "ko-do-mo"
+    },
+    "15": {
+        "word": "先生",
+        "mng": "teacher",
+        "prnc": "sen-sei"
+    },
+    "16": {
+        "word": "学生",
+        "mng": "student",
+        "prnc": "ga-ku-sei"
+    },
+    "17": {
+        "word": "店",
+        "mng": "shop",
+        "prnc": "mi-se"
+    },
+    "18": {
+        "word": "学校",
+        "mng": "school",
+        "prnc": "gak-ko-u"
+    },
+    "19": {
+        "word": "町",
+        "mng": "town",
+        "prnc": "ma-chi"
+    },
+    "20": {
+        "word": "国",
+        "mng": "country",
+        "prnc": "ku-ni"
+    },
+    "21": {
+        "word": "車",
+        "mng": "car",
+        "prnc": "ku-ru-ma"
+    },
+    "22": {
+        "word": "道",
+        "mng": "road",
+        "prnc": "mi-chi"
+    },
+    "23": {
+        "word": "山",
+        "mng": "mountain",
+        "prnc": "ya-ma"
+    },
+    "24": {
+        "word": "川",
+        "mng": "river",
+        "prnc": "ka-wa"
+    },
+    "25": {
+        "word": "海",
+        "mng": "sea",
+        "prnc": "u-mi"
+    },
+    "26": {
+        "word": "空",
+        "mng": "sky",
+        "prnc": "so-ra"
+    },
+    "27": {
+        "word": "火",
+        "mng": "fire",
+        "prnc": "hi"
+    },
+    "28": {
+        "word": "木",
+        "mng": "tree",
+        "prnc": "ki"
+    },
+    "29": {
+        "word": "石",
+        "mng": "stone",
+        "prnc": "i-shi"
+    },
+    "30": {
+        "word": "犬",
+        "mng": "dog",
+        "prnc": "i-nu"
+    },
+    "31": {
+        "word": "猫",
+        "mng": "cat",
+        "prnc": "ne-ko"
+    },
+    "32": {
+        "word": "鳥",
+        "mng": "bird",
+        "prnc": "to-ri"
+    },
+    "33": {
+        "word": "魚",
+        "mng": "fish",
+        "prnc": "sa-ka-na"
+    },
+    "34": {
+        "word": "肉",
+        "mng": "meat",
+        "prnc": "ni-ku"
+    },
+    "35": {
+        "word": "米",
+        "mng": "rice",
+        "prnc": "ko-me"
+    },
+    "36": {
+        "word": "パン",
+        "mng": "bread",
+        "prnc": "pa-n"
+    },
+    "37": {
+        "word": "卵",
+        "mng": "egg",
+        "prnc": "ta-ma-go"
+    },
+    "38": {
+        "word": "果物",
+        "mng": "fruit",
+        "prnc": "ku-da-mo-no"
+    },
+    "39": {
+        "word": "野菜",
+        "mng": "vegetable",
+        "prnc": "ya-sa-i"
+    },
+    "40": {
+        "word": "砂糖",
+        "mng": "sugar",
+        "prnc": "sa-to-u"
+    },
+    "41": {
+        "word": "塩",
+        "mng": "salt",
+        "prnc": "shi-o"
+    },
+    "42": {
+        "word": "朝",
+        "mng": "morning",
+        "prnc": "a-sa"
+    },
+    "43": {
+        "word": "昼",
+        "mng": "day",
+        "prnc": "hi-ru"
+    },
+    "44": {
+        "word": "夜",
+        "mng": "night",
+        "prnc": "yo-ru"
+    },
+    "45": {
+        "word": "今日",
+        "mng": "today",
+        "prnc": "kyo-u"
+    },
+    "46": {
+        "word": "昨日",
+        "mng": "yesterday",
+        "prnc": "ki-no-u"
+    },
+    "47": {
+        "word": "明日",
+        "mng": "tomorrow",
+        "prnc": "a-shi-ta"
+    },
+    "48": {
+        "word": "今",
+        "mng": "now",
+        "prnc": "i-ma"
+    },
+    "49": {
+        "word": "時間",
+        "mng": "time",
+        "prnc": "ji-ka-n"
+    },
+    "50": {
+        "word": "年",
+        "mng": "year",
+        "prnc": "to-shi"
+    },
+    "51": {
+        "word": "月",
+        "mng": "month",
+        "prnc": "tsu-ki"
+    },
+    "52": {
+        "word": "週",
+        "mng": "week",
+        "prnc": "shu-u"
+    },
+    "53": {
+        "word": "日",
+        "mng": "day",
+        "prnc": "hi"
+    },
+    "54": {
+        "word": "大きい",
+        "mng": "big",
+        "prnc": "oo-ki-i"
+    },
+    "55": {
+        "word": "小さい",
+        "mng": "small",
+        "prnc": "chi-i-sa-i"
+    },
+    "56": {
+        "word": "長い",
+        "mng": "long",
+        "prnc": "na-ga-i"
+    },
+    "57": {
+        "word": "短い",
+        "mng": "short",
+        "prnc": "mi-ji-ka-i"
+    },
+    "58": {
+        "word": "良い",
+        "mng": "good",
+        "prnc": "yo-i"
+    },
+    "59": {
+        "word": "悪い",
+        "mng": "bad",
+        "prnc": "wa-ru-i"
+    },
+    "60": {
+        "word": "新しい",
+        "mng": "new",
+        "prnc": "a-ta-ra-shi-i"
+    },
+    "61": {
+        "word": "古い",
+        "mng": "old",
+        "prnc": "fu-ru-i"
+    },
+    "62": {
+        "word": "早い",
+        "mng": "fast",
+        "prnc": "ha-ya-i"
+    },
+    "63": {
+        "word": "遅い",
+        "mng": "slow",
+        "prnc": "o-so-i"
+    },
+    "64": {
+        "word": "熱い",
+        "mng": "hot",
+        "prnc": "a-tsu-i"
+    },
+    "65": {
+        "word": "冷たい",
+        "mng": "cold",
+        "prnc": "tsu-me-ta-i"
+    },
+    "66": {
+        "word": "好き",
+        "mng": "to like",
+        "prnc": "su-ki"
+    },
+    "67": {
+        "word": "嫌い",
+        "mng": "to dislike",
+        "prnc": "ki-ra-i"
+    },
+    "68": {
+        "word": "持つ",
+        "mng": "to hold",
+        "prnc": "mo-tsu"
+    },
+    "69": {
+        "word": "使う",
+        "mng": "to use",
+        "prnc": "tsu-ka-u"
+    },
+    "70": {
+        "word": "作る",
+        "mng": "to make",
+        "prnc": "tsu-ku-ru"
+    },
+    "71": {
+        "word": "買う",
+        "mng": "to buy",
+        "prnc": "ka-u"
+    },
+    "72": {
+        "word": "売る",
+        "mng": "to sell",
+        "prnc": "u-ru"
+    },
+    "73": {
+        "word": "歩く",
+        "mng": "to walk",
+        "prnc": "a-ru-ku"
+    },
+    "74": {
+        "word": "走る",
+        "mng": "to run",
+        "prnc": "ha-shi-ru"
+    },
+    "75": {
+        "word": "座る",
+        "mng": "to sit",
+        "prnc": "su-wa-ru"
+    },
+    "76": {
+        "word": "立つ",
+        "mng": "to stand",
+        "prnc": "ta-tsu"
+    },
+    "77": {
+        "word": "開ける",
+        "mng": "to open",
+        "prnc": "a-ke-ru"
+    },
+    "78": {
+        "word": "閉める",
+        "mng": "to close",
+        "prnc": "shi-me-ru"
+    },
+    "79": {
+        "word": "入る",
+        "mng": "to enter",
+        "prnc": "ha-i-ru"
+    },
+    "80": {
+        "word": "出る",
+        "mng": "to leave",
+        "prnc": "de-ru"
+    },
+    "81": {
+        "word": "来る",
+        "mng": "to come",
+        "prnc": "ku-ru"
+    },
+    "82": {
+        "word": "ある",
+        "mng": "to exist",
+        "prnc": "a-ru"
+    },
+    "83": {
+        "word": "いる",
+        "mng": "to exist (living)",
+        "prnc": "i-ru"
+    },
+    "84": {
+        "word": "する",
+        "mng": "to do",
+        "prnc": "su-ru"
+    },
+    "85": {
+        "word": "言う",
+        "mng": "to say",
+        "prnc": "i-u"
+    },
+    "86": {
+        "word": "書く",
+        "mng": "to write",
+        "prnc": "ka-ku"
+    },
+    "87": {
+        "word": "読む",
+        "mng": "to read",
+        "prnc": "yo-mu"
+    },
+    "88": {
+        "word": "考える",
+        "mng": "to think",
+        "prnc": "kan-ga-e-ru"
+    },
+    "89": {
+        "word": "知る",
+        "mng": "to know",
+        "prnc": "shi-ru"
+    },
+    "90": {
+        "word": "学ぶ",
+        "mng": "to learn",
+        "prnc": "ma-na-bu"
+    },
+    "91": {
+        "word": "教える",
+        "mng": "to teach",
+        "prnc": "o-shi-e-ru"
+    },
+    "92": {
+        "word": "働く",
+        "mng": "to work",
+        "prnc": "ha-ta-ra-ku"
+    },
+    "93": {
+        "word": "休む",
+        "mng": "to rest",
+        "prnc": "ya-su-mu"
+    },
+    "94": {
+        "word": "遊ぶ",
+        "mng": "to play",
+        "prnc": "a-so-bu"
+    },
+    "95": {
+        "word": "笑う",
+        "mng": "to laugh",
+        "prnc": "wa-ra-u"
+    },
+    "96": {
+        "word": "泣く",
+        "mng": "to cry",
+        "prnc": "na-ku"
+    },
+    "97": {
+        "word": "愛",
+        "mng": "love",
+        "prnc": "a-i"
+    },
+    "98": {
+        "word": "お金",
+        "mng": "money",
+        "prnc": "o-ka-ne"
+    },
+    "99": {
+        "word": "仕事",
+        "mng": "work/job",
+        "prnc": "shi-go-to"
+    },
+    "100": {
+        "word": "世界",
+        "mng": "world",
+        "prnc": "se-ka-i"
+    }
+}

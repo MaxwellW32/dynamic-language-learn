@@ -1,4 +1,8 @@
-import { areaConnectionType, areaType, bookType, chapterType, characterType, locationSchema, locationType } from "@/types"
+import { areaConnectionType, areaType, bookType, chapterType, characterType, chosenLanguageOptionType, locationSchema, locationType } from "@/types"
+
+export function makeNativeTargetKey(native: chosenLanguageOptionType, target: chosenLanguageOptionType) {
+    return `${native.name.toLowerCase()}${native.dialect !== undefined ? `(${native.dialect.toLowerCase()})` : ""}__${target.name.toLowerCase()}${target.dialect !== undefined ? `(${target.dialect.toLowerCase()})` : ""}`
+}
 
 export function getImportantCharacters(book: bookType) {
     const importantCharacters: characterType[] = []

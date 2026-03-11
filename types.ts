@@ -9,11 +9,35 @@ export const languageOptionSchema = z.object({
 })
 export type languageOptionType = z.infer<typeof languageOptionSchema>
 
-export const languageOptionChosenSchema = z.object({
+export const chosenLanguageOptionSchema = z.object({
     name: z.string().min(1),
     dialect: z.string().min(1).optional(),
 })
-export type languageOptionChosenType = z.infer<typeof languageOptionChosenSchema>
+export type chosenLanguageOptionType = z.infer<typeof chosenLanguageOptionSchema>
+
+export const dictionaryJSONSchema = z.record(
+    z.string().min(1),
+    z.object({
+        word: z.string().min(1),
+        mng: z.string().min(1),
+        prnc: z.string().min(1),
+    })
+)
+export type dictionaryJSONType = z.infer<typeof dictionaryJSONSchema>
+
+export const grammarJSONSchema = z.record(
+    z.string().min(1),
+    z.object({
+        title: z.string().min(1),
+        description: z.string().min(1),
+    })
+)
+export type grammarJSONType = z.infer<typeof grammarJSONSchema>
+
+export type languageLessonType = {
+    dictionary: dictionaryJSONType,
+    grammar: grammarJSONType,
+}
 
 
 
@@ -426,17 +450,25 @@ export const userSchema = z.object({
     //defaults
     id: z.string().min(1, "please add a user id"),
     languageSettings: z.object({
-        native: languageOptionChosenSchema,
-        targets: languageOptionChosenSchema.array(),
+        native: chosenLanguageOptionSchema,
+        targets: chosenLanguageOptionSchema.array(),
     }),
-    wordProgress: z.record(
-        z.string().min(1),//english(american)|japanese
-        z.record(
-            z.string().min(1),//word num code
-            z.object({
-                mastery: z.number().min(1).max(10),
-            })
-        )
+    lessonProgress: z.record(
+        z.string().min(1),//english(british)__japanese
+        z.object({
+            dictionary: z.record(
+                z.string().min(1),//word num code
+                z.object({
+                    mastery: z.number().min(1).max(10),
+                })
+            ),
+            grammar: z.record(
+                z.string().min(1),//grammar lesson num code
+                z.object({
+                    mastery: z.number().min(1).max(10),
+                })
+            ),
+        })
     ),
 
     //regular
@@ -461,6 +493,7 @@ export const bookSchema = z.object({
     id: z.string().min(1),
     dateCreated: dateSchema,
     name: z.string().min(1),
+    targetLanguages: chosenLanguageOptionSchema.array(),
     readyToRead: z.boolean(),
     storyPremise: z.string().min(1),
     locations: locationSchema.array(),

@@ -1,0 +1,62 @@
+{
+    "1": {
+        "title": "A は B です",
+        "description": "Basic sentence structure meaning 'A is B'. Example: 私は学生です (I am a student)."
+    },
+    "2": {
+        "title": "A は B じゃないです",
+        "description": "Negative form meaning 'A is not B'. Example: 私は先生じゃないです (I am not a teacher)."
+    },
+    "3": {
+        "title": "A は B ですか",
+        "description": "Question form by adding か at the end. Example: あなたは学生ですか (Are you a student?)."
+    },
+    "4": {
+        "title": "A の B",
+        "description": "Possession or relation meaning 'B of A'. Example: 私の友達 (my friend)."
+    },
+    "5": {
+        "title": "A を V",
+        "description": "Marks the direct object of a verb. Example: パンを食べる (eat bread)."
+    },
+    "6": {
+        "title": "A に 行く",
+        "description": "Destination particle に with movement verbs. Example: 学校に行く (go to school)."
+    },
+    "7": {
+        "title": "A で V",
+        "description": "Indicates location where an action happens. Example: 店で食べる (eat at a shop)."
+    },
+    "8": {
+        "title": "A と B",
+        "description": "Connector meaning 'A and B'. Example: パンと水 (bread and water)."
+    },
+    "9": {
+        "title": "A も",
+        "description": "Means 'also / too'. Example: 私も学生です (I am also a student)."
+    },
+    "10": {
+        "title": "A が ある / いる",
+        "description": "Express existence. ある for objects, いる for living things. Example: 犬がいる (there is a dog)."
+    },
+    "11": {
+        "title": "Adjective + です",
+        "description": "Describing nouns using adjectives. Example: 水は冷たいです (water is cold)."
+    },
+    "12": {
+        "title": "V ます",
+        "description": "Polite verb form used in everyday conversation. Example: 食べます (to eat politely)."
+    },
+    "13": {
+        "title": "V ません",
+        "description": "Negative polite verb form. Example: 食べません (do not eat)."
+    },
+    "14": {
+        "title": "V ました",
+        "description": "Past polite verb form. Example: 食べました (ate)."
+    },
+    "15": {
+        "title": "A から B",
+        "description": "Means 'from A to B'. Example: 日本から来ました (came from Japan)."
+    }
+}
