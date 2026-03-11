@@ -1,12 +1,17 @@
 import { relations } from "drizzle-orm";
 import { boolean, timestamp, pgTable, text, primaryKey, integer, index, json } from "drizzle-orm/pg-core"
 import type { AdapterAccountType } from "@auth/core/adapters"
-import { areaConnectionType, characterType, goalType, locationType, sectionType } from "@/types";
+import { areaConnectionType, characterType, goalType, locationType, sectionType, userType } from "@/types";
 import { defaultText } from "@/lib/defaultData";
 
 export const users = pgTable("users", {
     //defaults
     id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    languageSettings: json("languageSettings").$type<userType["languageSettings"]>().default({
+        native: { name: "english", dialect: "american" },
+        targets: [],
+        wordProgres: {}
+    }).notNull(),
 
     //regular
 

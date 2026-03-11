@@ -15,7 +15,6 @@ import {
 } from '@headlessui/react'
 import {
     Bars3Icon,
-    SquaresPlusIcon,
     XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { ChevronDownIcon } from '@heroicons/react/20/solid'
@@ -25,6 +24,8 @@ import defaultProfileImage from "@/public/defaultProfileImage.jpg"
 import MoreItemsMenu from './MoreItemsMenu'
 import LogButton from '../logButton/LogButton'
 import Link from 'next/link'
+import { useAtom } from 'jotai'
+import { showingLanguageSelectionGlobal } from '@/utility/globalState'
 
 const menu: {
     name: string,
@@ -68,6 +69,19 @@ const menu: {
 
 export default function Navbar({ session }: { session: Session | null }) {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+    const [showingLanguageSelection, showingLanguageSelectionSet] = useAtom(showingLanguageSelectionGlobal)
+
+    const moreNavMenuContent = (
+        <div className='simpleGrid'>
+            <LogButton option={session === null ? "login" : "logout"} />
+
+            {!showingLanguageSelection && (
+                <button onClick={() => showingLanguageSelectionSet(true)}>
+                    Language Settings
+                </button>
+            )}
+        </div>
+    )
 
     return (
         <header className="bg-white dark:bg-gray-900">
@@ -182,9 +196,7 @@ export default function Navbar({ session }: { session: Session | null }) {
 
                             bottom={(
                                 <>
-                                    <li>
-                                        <LogButton option='logout' />
-                                    </li>
+                                    {moreNavMenuContent}
                                 </>
                             )}
                         />
@@ -257,7 +269,7 @@ export default function Navbar({ session }: { session: Session | null }) {
                             </div>
 
                             <div className="py-6">
-                                <LogButton option={session === null ? "login" : "logout"} />
+                                {moreNavMenuContent}
                             </div>
                         </div>
                     </div>

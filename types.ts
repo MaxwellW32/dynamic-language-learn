@@ -3,12 +3,30 @@ import { z } from "zod";
 //50 spaces for large differences
 
 //normal types
+export const languageOptionSchema = z.object({
+    name: z.string().min(1),
+    dialects: z.string().min(1).array().min(1).optional(),
+})
+export type languageOptionType = z.infer<typeof languageOptionSchema>
+
+export const languageOptionChosenSchema = z.object({
+    name: z.string().min(1),
+    dialect: z.string().min(1).optional(),
+})
+export type languageOptionChosenType = z.infer<typeof languageOptionChosenSchema>
+
+
+
+
 export const dateSchema = z.preprocess((val) => {
     if (val instanceof Date) return val;  // already a Date
     if (typeof val === "string" || typeof val === "number") return new Date(val); // convert string
 
     return val;
 }, z.date());
+
+
+
 
 //prompt component
 export type promptInfoType = {
@@ -23,6 +41,9 @@ export type promptInfoType = {
         msg: string
     }
 }
+
+
+
 
 //handle search
 export type tableFilterTypes<T> = {
@@ -404,6 +425,19 @@ export type makeChatMessagesResponseType = z.infer<typeof makeChatMessagesRespon
 export const userSchema = z.object({
     //defaults
     id: z.string().min(1, "please add a user id"),
+    languageSettings: z.object({
+        native: languageOptionChosenSchema,
+        targets: languageOptionChosenSchema.array(),
+        wordProgres: z.record(
+            z.string().min(1),//english(american)|japanese
+            z.record(
+                z.string().min(1),//word num code
+                z.object({
+                    mastery: z.number().min(1).max(10),
+                })
+            )
+        )
+    }),
 
     //regular
 
