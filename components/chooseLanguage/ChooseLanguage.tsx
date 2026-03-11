@@ -1,5 +1,6 @@
 "use client"
 
+import styles from "./style.module.css"
 import { Session } from "next-auth"
 import { useState } from "react"
 import { languageOptions } from "@/lib/languages"
@@ -8,11 +9,12 @@ import { updateUser } from "@/serverFunctions/handleUsers"
 import toast from "react-hot-toast"
 import { useAtom } from "jotai"
 import { showingLanguageSelectionGlobal } from "@/utility/globalState"
-import styles from "./style.module.css"
+import { useRouter } from "next/navigation"
 
 export default function ChooseLanguage({ session }: { session: Session }) {
-    const [showingLanguageSelection, showingLanguageSelectionSet] = useAtom(showingLanguageSelectionGlobal)
+    const router = useRouter()
 
+    const [showingLanguageSelection, showingLanguageSelectionSet] = useAtom(showingLanguageSelectionGlobal)
     const [userLanguageSettings, userLanguageSettingsSet] = useState<userType["languageSettings"]>(session.user.languageSettings)
 
     function setNative(language: languageOptionChosenType) {
@@ -46,6 +48,12 @@ export default function ChooseLanguage({ session }: { session: Session }) {
         })
     }
 
+    function isTargetSelected(name: string, dialect?: string) {
+        return userLanguageSettings.targets.some(
+            t => t.name === name && t.dialect === dialect
+        )
+    }
+
     async function save() {
         await updateUser(session.user.id, {
             languageSettings: userLanguageSettings
@@ -54,12 +62,8 @@ export default function ChooseLanguage({ session }: { session: Session }) {
         toast.success("language settings saved!")
 
         showingLanguageSelectionSet(false)
-    }
 
-    function isTargetSelected(name: string, dialect?: string) {
-        return userLanguageSettings.targets.some(
-            t => t.name === name && t.dialect === dialect
-        )
+        router.refresh()
     }
 
     return (

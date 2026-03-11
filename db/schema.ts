@@ -10,8 +10,8 @@ export const users = pgTable("users", {
     languageSettings: json("languageSettings").$type<userType["languageSettings"]>().default({
         native: { name: "english", dialect: "american" },
         targets: [],
-        wordProgres: {}
     }).notNull(),
+    wordProgress: json("wordProgress").$type<userType["wordProgress"]>().default({}).notNull(),
 
     //regular
 

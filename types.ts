@@ -428,16 +428,16 @@ export const userSchema = z.object({
     languageSettings: z.object({
         native: languageOptionChosenSchema,
         targets: languageOptionChosenSchema.array(),
-        wordProgres: z.record(
-            z.string().min(1),//english(american)|japanese
-            z.record(
-                z.string().min(1),//word num code
-                z.object({
-                    mastery: z.number().min(1).max(10),
-                })
-            )
-        )
     }),
+    wordProgress: z.record(
+        z.string().min(1),//english(american)|japanese
+        z.record(
+            z.string().min(1),//word num code
+            z.object({
+                mastery: z.number().min(1).max(10),
+            })
+        )
+    ),
 
     //regular
 
