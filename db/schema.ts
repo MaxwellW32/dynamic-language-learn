@@ -33,11 +33,11 @@ export const books = pgTable("books", {
     dateCreated: timestamp("dateCreated", { mode: "date" }).notNull().defaultNow(),
     name: text("name").notNull().default(defaultText),
     targetLanguages: json("targetLanguages").$type<bookType["targetLanguages"][]>().default([]).notNull(),
-    readyToRead: boolean("readyToRead").notNull().default(false),
     storyPremise: text("storyPremise").notNull().default(defaultText),
     locations: json("locations").$type<locationType[]>().default([]).notNull(),
     characters: json("characters").$type<characterType[]>().default([]).notNull(),
     goals: json("goals").$type<goalType[]>().default([]).notNull(),
+    readyToRead: boolean("readyToRead").notNull().default(false),
     areaConnections: json("areaConnections").$type<areaConnectionType[]>().default([]).notNull(),
     currentChapterId: text("currentChapterId").notNull().default(""),
 

@@ -171,30 +171,28 @@ export type characterType = z.infer<typeof characterSchema>
 export const goalSchema = z.object({
     id: z.string().min(1),
     title: z.string().min(1),
+    storyMarker: z.enum(["introduction", "rising-action", "climax", "falling-action", "resolution"]),
     subGoals: z.object({
         id: z.string().min(1),
         title: z.string().min(1),
         subGoalTypeObj: z.union([
             z.object({
-                //exposition ai writes around - determines if complete
+                //exposition ai writes around - takes place at an areadId - ai determines if complete
                 type: z.literal("exposition"),
-                text: z.string().min(1)
-            }),
-            z.object({
-                //visit area - complete
-                type: z.literal("area"),
+                text: z.string().min(1),
                 areaId: areaSchema.shape.id
-            }),
-            z.object({
-                //defeat character - complete
-                type: z.literal("defeat-character"),
-                characterId: characterSchema.shape.id
             }),
             z.object({
                 //convince blacksmith, recruit npc - spawns chatroom
                 type: z.literal("interactive"),
                 goal: z.string().min(1),
                 characterId: characterSchema.shape.id
+            }),
+            z.object({
+                //defeat character - complete
+                type: z.literal("defeat-character"),
+                characterId: characterSchema.shape.id,
+                gameModes: z.object({ name: z.enum(["meaning", "pronounciation", "grammar"]) }).array()
             }),
         ]),
         complete: z.boolean(),
@@ -494,11 +492,11 @@ export const bookSchema = z.object({
     dateCreated: dateSchema,
     name: z.string().min(1),
     targetLanguages: chosenLanguageOptionSchema.array(),
-    readyToRead: z.boolean(),
     storyPremise: z.string().min(1),
     locations: locationSchema.array(),
     characters: characterSchema.array(),
     goals: goalSchema.array(),
+    readyToRead: z.boolean(),
     areaConnections: areaConnectionSchema.array(),
     currentChapterId: z.string(),
 

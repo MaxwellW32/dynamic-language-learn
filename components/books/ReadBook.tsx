@@ -1,6 +1,6 @@
 "use client"
 import styles from "./style.module.css"
-import { areaConnectionType, areaType, bookSchema, bookType, chapterType, characterType, gptApiFunctionCallOptionType, languageLessonType, locationType, makeCharactersBodySchema, makeCharactersBodyType, makeCharactersResponseSchema, makeGoalsBodySchema, makeGoalsBodyType, makeGoalsResponseSchema, makeLocationsBodySchema, makeLocationsBodyType, makeLocationsResponseSchema, makeStoryPremiseBodySchema, makeStoryPremiseBodyType, makeStoryPremiseResponseSchema, placeType, promptInfoType, userType } from '@/types'
+import { areaConnectionType, areaType, bookSchema, bookType, chapterType, characterType, dictionaryJSONType, gptApiFunctionCallOptionType, grammarJSONType, languageLessonType, locationType, makeCharactersBodySchema, makeCharactersBodyType, makeCharactersResponseSchema, makeGoalsBodySchema, makeGoalsBodyType, makeGoalsResponseSchema, makeLocationsBodySchema, makeLocationsBodyType, makeLocationsResponseSchema, makeStoryPremiseBodySchema, makeStoryPremiseBodyType, makeStoryPremiseResponseSchema, placeType, promptInfoType, userType } from '@/types'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import ShowMore from '../showMore/ShowMore'
 import EditPromptInfo from '../promptInfo/EditPromptInfo'
@@ -23,6 +23,95 @@ export default function ReadBook({ seenUser, seenBook }: { seenUser: userType, s
     const [user, userSet] = useState({ ...seenUser })
     const [book, bookSet] = useState({ ...seenBook })
     const [languageLessons, languageLessonsSet] = useState<{ [key: string]: languageLessonType }>({})
+
+    type interactedLanguageLessonsType = {
+        [key: string]: {
+            dictionary: {
+                seen: dictionaryJSONType,
+                new: dictionaryJSONType,
+            },
+            grammar: {
+                seen: grammarJSONType,
+                new: grammarJSONType,
+            },
+        }
+    }
+    const sortedLanguageLessons = useMemo<interactedLanguageLessonsType>(() => {
+        const newInteractedLanguageLessons: interactedLanguageLessonsType = {}
+        //amt of mastery tracked in user obj
+        //want to send to gpt not interacted with
+
+        Object.entries(languageLessons).map(eachLanguageLessonEntry => {
+            const eachLanguageLessonKey = eachLanguageLessonEntry[0] //combined native/target pair
+            const eachLanguageLessonObj = eachLanguageLessonEntry[1]
+
+            const seenDictionaryWords: dictionaryJSONType = {}
+            const newDictionaryWords: dictionaryJSONType = {}
+
+            const seenGrammarWords: grammarJSONType = {}
+            const newGrammarWords: grammarJSONType = {}
+
+            //dictionary - get words seen already
+            const allDictionaryEntries = Object.entries(eachLanguageLessonObj.dictionary)
+            allDictionaryEntries.map(eachDictionaryEntry => {
+                const eachDictionaryKey = eachDictionaryEntry[0]
+                const eachDictionaryObj = eachDictionaryEntry[1]
+
+                if (user.lessonProgress[eachLanguageLessonKey] !== undefined) {
+                    if (user.lessonProgress[eachLanguageLessonKey].dictionary[eachDictionaryKey] !== undefined) {
+                        //add onto seenDictionaryWords
+                        seenDictionaryWords[eachDictionaryKey] = eachDictionaryObj
+
+                    } else {
+                        //newDictionaryWords
+                        newDictionaryWords[eachDictionaryKey] = eachDictionaryObj
+                    }
+
+                } else {
+                    //no results yet so add everything
+                    newDictionaryWords[eachDictionaryKey] = eachDictionaryObj
+                }
+            })
+
+            //grammar - get grammar lessons seen already
+            const allGrammarEntries = Object.entries(eachLanguageLessonObj.grammar)
+            allGrammarEntries.map(eachGrammarEntry => {
+                const eachGrammarKey = eachGrammarEntry[0]
+                const eachGrammarObj = eachGrammarEntry[1]
+
+                if (user.lessonProgress[eachLanguageLessonKey] !== undefined) {
+                    if (user.lessonProgress[eachLanguageLessonKey].grammar[eachGrammarKey] !== undefined) {
+                        //add onto seenGrammarWords
+                        seenGrammarWords[eachGrammarKey] = eachGrammarObj
+
+                    } else {
+                        //newGrammarWords
+                        newGrammarWords[eachGrammarKey] = eachGrammarObj
+                    }
+
+                } else {
+                    //no results yet so add everything
+                    newGrammarWords[eachGrammarKey] = eachGrammarObj
+                }
+            })
+
+            //write onto newInteracted obj
+            newInteractedLanguageLessons[eachLanguageLessonKey] = {
+                dictionary: {
+                    seen: seenDictionaryWords,
+                    new: newDictionaryWords
+                },
+                grammar: {
+                    seen: seenGrammarWords,
+                    new: newGrammarWords
+                }
+            }
+        })
+        console.log(`$newInteractedLanguageLessons`, newInteractedLanguageLessons)
+
+        return newInteractedLanguageLessons
+    }, [user.lessonProgress, languageLessons])
+
     const [neededSimulatedConnections, neededSimulatedConnectionsSet] = useState<areaConnectionType[]>([])
     const [showingSetupMenu, showingSetupMenuSet] = useState(!book.readyToRead)
     const [showingSideMenu, showingSideMenuSet] = useState(false)
@@ -566,14 +655,14 @@ Example:
             book.goals.map(eachGoal => {
                 eachGoal.subGoals.map(eachSubGoal => {
                     //ensure that all area id's accounted for
-                    if (eachSubGoal.subGoalTypeObj.type === "area") {
+                    if (eachSubGoal.subGoalTypeObj.type === "exposition") {
                         let foundGoalArea = false
 
                         //check each area
                         book.locations.map(eachLMap => {
                             eachLMap.places.map(eachPMap => {
                                 eachPMap.areas.map(eachAMap => {
-                                    if (eachSubGoal.subGoalTypeObj.type === "area" && eachAMap.id === eachSubGoal.subGoalTypeObj.areaId) {
+                                    if (eachSubGoal.subGoalTypeObj.type === "exposition" && eachAMap.id === eachSubGoal.subGoalTypeObj.areaId) {
                                         foundGoalArea = true
                                     }
                                 })
@@ -622,7 +711,6 @@ Example:
             return false
         }
     }
-    console.log(`$languageLessons`, languageLessons)
 
     return (
         <main style={{ display: "grid", position: "relative", zIndex: 0, overflow: "auto", }}>
@@ -1365,7 +1453,7 @@ Example:
 
                                             <div className='gridColumn snap'>
                                                 {eachGoal.subGoals.length === 0 && (
-                                                    <p>No sub-goals in location yet</p>
+                                                    <p>No sub-goals yet</p>
                                                 )}
 
                                                 {eachGoal.subGoals.map((eachSubGoal) => {
@@ -1374,11 +1462,11 @@ Example:
                                                     let seenCharacterToDefeat: characterType | undefined = undefined
 
                                                     //get referenced area
-                                                    if (eachSubGoal.subGoalTypeObj.type === "area") {
+                                                    if (eachSubGoal.subGoalTypeObj.type === "exposition") {
                                                         book.locations.map(eachLMap => {
                                                             eachLMap.places.map(eachPMap => {
                                                                 eachPMap.areas.map(eachAMap => {
-                                                                    if (eachSubGoal.subGoalTypeObj.type === "area" && eachAMap.id === eachSubGoal.subGoalTypeObj.areaId) {
+                                                                    if (eachSubGoal.subGoalTypeObj.type === "exposition" && eachAMap.id === eachSubGoal.subGoalTypeObj.areaId) {
                                                                         currentArea = eachAMap
                                                                     }
                                                                 })
@@ -1417,11 +1505,7 @@ Example:
                                                             {eachSubGoal.subGoalTypeObj.type === "exposition" && (
                                                                 <>
                                                                     <p>{eachSubGoal.subGoalTypeObj.text}</p>
-                                                                </>
-                                                            )}
 
-                                                            {eachSubGoal.subGoalTypeObj.type === "area" && (
-                                                                <>
                                                                     {currentArea !== undefined ? (
                                                                         <>
                                                                             <p>visit:</p>
@@ -1499,7 +1583,7 @@ Example:
                                 })
 
                                 //sync to server
-                                syncBookToServerKeysSet(["areaConnections"])
+                                syncBookToServerKeysSet(["readyToRead"])
 
                                 showingSetupMenuSet(false)
                             }}
