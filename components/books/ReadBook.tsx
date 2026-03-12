@@ -48,8 +48,8 @@ export default function ReadBook({ seenUser, seenBook }: { seenUser: userType, s
             const seenDictionaryWords: dictionaryJSONType = {}
             const newDictionaryWords: dictionaryJSONType = {}
 
-            const seenGrammarWords: grammarJSONType = {}
-            const newGrammarWords: grammarJSONType = {}
+            const seenGrammarLessons: grammarJSONType = {}
+            const newGrammarLessons: grammarJSONType = {}
 
             //dictionary - get words seen already
             const allDictionaryEntries = Object.entries(eachLanguageLessonObj.dictionary)
@@ -82,16 +82,16 @@ export default function ReadBook({ seenUser, seenBook }: { seenUser: userType, s
                 if (user.lessonProgress[eachLanguageLessonKey] !== undefined) {
                     if (user.lessonProgress[eachLanguageLessonKey].grammar[eachGrammarKey] !== undefined) {
                         //add onto seenGrammarWords
-                        seenGrammarWords[eachGrammarKey] = eachGrammarObj
+                        seenGrammarLessons[eachGrammarKey] = eachGrammarObj
 
                     } else {
                         //newGrammarWords
-                        newGrammarWords[eachGrammarKey] = eachGrammarObj
+                        newGrammarLessons[eachGrammarKey] = eachGrammarObj
                     }
 
                 } else {
                     //no results yet so add everything
-                    newGrammarWords[eachGrammarKey] = eachGrammarObj
+                    newGrammarLessons[eachGrammarKey] = eachGrammarObj
                 }
             })
 
@@ -102,8 +102,8 @@ export default function ReadBook({ seenUser, seenBook }: { seenUser: userType, s
                     new: newDictionaryWords
                 },
                 grammar: {
-                    seen: seenGrammarWords,
-                    new: newGrammarWords
+                    seen: seenGrammarLessons,
+                    new: newGrammarLessons
                 }
             }
         })
