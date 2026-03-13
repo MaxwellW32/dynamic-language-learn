@@ -2,12 +2,13 @@
 import { db } from "@/db"
 import { chapters } from "@/db/schema"
 import { chosenGptModel, openai } from "@/lib/openai"
-import { areaConnectionType, bookType, chapterSchema, chapterType, characterType, goalType, locationType, makeChapterSectionsResponseSchema, makeChapterSectionsResponseType, makeChatMessagesResponseSchema, makeChatMessagesResponseType, newChapterSchema, newChapterType, sectionChatMessageType, sectionLoaderType, sectionType, tableFilterTypes } from "@/types"
+import { bookType, chapterSchema, chapterType, characterType, chosenLanguageOptionType, dictionaryJSONType, goalType, interactedLanguageLessonsType, locationType, makeChapterSectionsResponseSchema, makeChapterSectionsResponseType, makeChatMessagesResponseSchema, makeChatMessagesResponseType, newChapterSchema, newChapterType, sectionChatMessageType, sectionType, tableFilterTypes } from "@/types"
 import { makeWhereClauses } from "@/utility/utility"
 import { and, asc, eq, SQLWrapper } from "drizzle-orm"
-import { v4 } from "uuid"
+import { v4 as uuidV4 } from "uuid"
 import { zodTextFormat } from "openai/helpers/zod";
 import { defaultText } from "@/lib/defaultData"
+import { getLatestGoalSubGoal } from "@/utility/contextHelpers"
 
 export async function addChapter(newChapterObj: newChapterType) {
     //validation
@@ -69,7 +70,7 @@ export async function getChapters(filter: tableFilterTypes<chapterType>, getWith
         where: and(...whereClauses),
         limit,
         offset,
-        orderBy: [asc(chapters.index)],
+        orderBy: [asc(chapters.dateCreated)],
         with: getWith === undefined ? undefined : {
             fromBook: getWith.fromBook,
         }
@@ -79,152 +80,263 @@ export async function getChapters(filter: tableFilterTypes<chapterType>, getWith
 }
 
 //gpt
-export async function makeChapterSections({ storyPremise, characters, goals, locations, areaConnections, prevSections, currentChapter, sectionLoader }: { storyPremise: bookType["storyPremise"], characters: characterType[], goals: goalType[], locations: locationType[], areaConnections: areaConnectionType[], prevSections: sectionType[], currentChapter: chapterType, sectionLoader: sectionLoaderType }): Promise<makeChapterSectionsResponseType> {
-    const instructions = `You are a serialized narrative engine writing the next story sections.
+export async function makeChapterSections({ nativeLanguage, targetLanguage, storyPremise, characters, goals, locations, prevSections, currentChapter, interactedLanguageLessons, masteryLevel }: { nativeLanguage: chosenLanguageOptionType, targetLanguage: chosenLanguageOptionType, storyPremise: bookType["storyPremise"], characters: characterType[], goals: goalType[], locations: locationType[], prevSections: sectionType[], currentChapter: chapterType, interactedLanguageLessons: interactedLanguageLessonsType, masteryLevel: number }): Promise<makeChapterSectionsResponseType> {
+    const newWordsString = Object.entries(interactedLanguageLessons).map(eachEntry => {
+        const eachKey = eachEntry[0] //native/target pair
+        const eachObj = eachEntry[1]
 
-    Your task:
-    Continue the story using the provided context and game state.
-    Write structured sections that move the player toward active goals.
-    
-    CORE DESIGN RULES:
+        const reducedDictObj = Object.fromEntries(Object.entries(eachObj.dictionary.new).slice(0, 20).map(eachDictionaryEntry => {
+            //reduce words
+            eachDictionaryEntry[1] = { word: eachDictionaryEntry[1].word } as dictionaryJSONType["KEY"]
 
-    1. Story Direction
-    - The storyPremise defines the expected overall direction.
-    - Goals define what the player is actively trying to accomplish.
-    - Each section must meaningfully progress at least one active goal.
-    - Do not stall progression unless building tension intentionally.
+            return eachDictionaryEntry
+        }))
 
-    2. Continuity
-    - Use prevSections to avoid repetition.
-    - Do not restate previously described environments unless something has changed.
-    - Maintain emotional, physical, and narrative continuity.
-    - Character knowledge must remain consistent with past events.
+        return `${eachKey}
+${JSON.stringify(reducedDictObj)}`
+    }).join("\n\n")
 
-    3. Characters
-    - The player character is the user.
-    - Characters with location "with-player" are traveling companions → Include them in dialogue, reactions, or decisions.
-    - Characters in the same area may appear naturally in scenes.
-    - Do not invent new characters.
-    - Preserve personality consistency.
-    - Dialogue should reflect goals and current tension.
+    const latestGoalSubGoal = getLatestGoalSubGoal({ goals: goals } as bookType)
+    if (latestGoalSubGoal.latestGoal === undefined || latestGoalSubGoal.latestSubGoal === undefined) {
+        throw new Error("$no more goals/subGoals")
+    }
+    const activeGoal = latestGoalSubGoal.latestGoal
+    const activeSubGoal = latestGoalSubGoal.latestSubGoal as goalType["subGoals"][number]
 
-    4. Goals
-    - Identify which goals are incomplete.
-    - Prioritize subGoals that are achievable in the current area.
-    - If a defeat-character goal exists and the character is present, escalate tension.
-    - If an interactive goal exists, create opportunity for dialogue.
+    const instructions = `You are a serialized narrative engine writing the next story sections for an interactive language-learning story game.
+Your job is to continue the story while naturally introducing vocabulary the user is trying to learn.
 
-    5. Locations & Travel
-    - The current area is where the scene begins.
-    - Adjacent areas are defined in areaConnections.
-    - If traveling, describe movement using the visual descriptions of the areaConnections connecting them.
-    - Travel should feel physical and atmospheric.
-    - Do not teleport the player without narrative transition.
+========================
+LANGUAGE SETTINGS
+========================
 
-    6. Section Types - A section may be:
-    A) exposition
-    - Primary story narration.
-    - Advance plot, tension, or discovery.
-    - Avoid filler introspection.
-    - Write vividly but efficiently.
-    - Visual object is OPTIONAL.
-    - Only include visual for peak cinematic moments.
+Native Language:
+${JSON.stringify(nativeLanguage)}
 
-    B) chat
-    - This is a personal chat room between the user "player" and other characters - managed by a different AI
-    - The user will fill this with messages later - so leave empty
-    - Simply include the character Id's you think would be needed between involved characters
+Target Language the user is learning:
+${JSON.stringify(targetLanguage)}
 
-    7. Visual Rules
-    - Use visual.description only for strong visual beats:
-      - Major reveals
-      - First arrival in a striking location
-      - Boss confrontation
-      - Emotional turning points
-    - Do NOT overuse visuals.
-    - Most sections should not include a visual.
+New Words Available:
+${newWordsString}
 
-    8. Pacing
-    - Return 2–5 sections.
-    - At least one section must meaningfully move a goal forward.
-    - Avoid ending mid-conversation unless intentional cliffhanger.
-    - Do not resolve the entire story unless goals indicate finale.
+========================
+VOCABULARY LEARNING RULES
+========================
 
-    9. Technical Constraints
-    - Do not invent IDs.
-    - Only use provided characterIds.
-    - Stay consistent with provided data.
-    - No commentary outside structured response.
+Your job is to introduce target-language vocabulary naturally inside the story.
 
-    10. World State Changes
-        You may return changes that modify characters or goals based on what occurred in the sections you wrote.
-        Changes must be logical consequences of the narrative. Do not invent arbitrary updates.
-        You may include zero or more changes.
+Rules:
+• Select words ONLY from the "New Words Available" list.
+• Never invent or hallucinate word ids.
+• When you use a word, include its original id exactly as provided.
 
-        A) Character Changes (character-change)
-            Use this when events in the chapter meaningfully alter a character.
-            You may update:
-            location (if non player characters join/leave the player)
-            status
-            skillsAndAbilities (gained, lost, altered)
-            likes / dislikes (if shifted by events)
-            memories (new important memory formed)
+Vocabulary must be introduced naturally within dialogue or narration.
 
-            Examples of valid triggers:
-            A character joins the player → update location to "with-player".
-            A mob is defeated → update status.
-            A traumatic revelation → add a new memory.
-            A betrayal → modify dislikes.
+Examples of natural usage:
+- greetings
+- everyday actions
+- objects in the environment
+- short spoken phrases
 
-        B) Player changes
-        ${sectionLoader !== undefined && sectionLoader.wantedAreaId !== undefined && (`
-            Location:
-            Use this when player wants to move locations, decide whether you'll grant the location change or not depending on the circumstances. If granted please add an entry to the changes array changeObj:"player-change", playerChangeObj:"location" and assign the newAreaId: ${sectionLoader.wantedAreaId}. If not give a rejection reason if player can't change location. e.g still fighting dragon boss.`)}
-            
-        C) Sub-goal Changes
-            Use this when a sub-goal meaningfully progresses or fails.
-            You may:
-            Mark as success
+Avoid unnatural usage such as:
+- listing vocabulary
+- explaining translations
+- repeating the same word excessively.
 
-            Mark as failed only if the narrative makes the original objective impossible or fundamentally altered.
-            Provide newSubGoals that redefine how the main goal can now be achieved.
-            New subGoals must provide another way to accomplish main goal
+========================
+VOCABULARY DIFFICULTY
+========================
 
-        ${currentChapter.name === defaultText ? (` d) Chapter changes
-            Please add an entry to the changes array. changeObj:"chapter-change", chapterChangeObj:"name" - come up with a creative name for this chapter.
-    `) : ""}
+Choose words according to the user's masteryLevel 
+MasteryLevel:
+${masteryLevel}%.
 
-    11. Chapter handling
-        Generated sections mainly belong to the current chapter, which is centered around the current MAIN goal (not the subgoal).
-        Only start a new chapter if the sections introduce a major narrative shift (new arc, setting change, tonal shift, or significant progression).
+General guidance:
 
-        If a new chapter is truly warranted, fill out the "forNewChapter" object with a short, creative thematic title based on the next goal. Use this sparingly. Most sections should remain within the current chapter.
+Low mastery:
+- Introduce 1–2 new words
+- Prefer simple vocabulary
 
-    Note:
-    Only modify characters that appeared or were directly affected.
-    Changes must reflect what clearly happened in the sections.
-    Do not rewrite entire character profiles unnecessarily.
-    Keep updates minimal and precise.
-    Never modify unrelated characters or goals.
-    Changes must reflect what clearly happened in the sections.
+Medium mastery:
+- Introduce 2–4 words
+- Mix known and new vocabulary
+- entire sentence can be foreignWords
 
-    Story Premise:
-    ${JSON.stringify(storyPremise)}
+High mastery:
+- Introduce up to 5 words
+- entire sentence usually foreignWords
 
-    Characters:
-    ${JSON.stringify(characters)}
+========================
+VOCABULARY INTEGRATION
+========================
 
-    Goals:
-    ${JSON.stringify(goals)}
+Vocabulary should appear:
+• mostly in dialogue
+• occasionally in narration
+• during meaningful story moments
 
-    Locations:
-    ${JSON.stringify(locations)}
+Do NOT place many new words inside a single sentence.
 
-    Area Connections:
-    ${JSON.stringify(areaConnections)}
+Spread them across the sections naturally.
 
-    Previous Sections:
-    ${JSON.stringify(prevSections)}`
+The story must remain readable for a native speaker of the native language.
+
+========================
+PRIMARY STORY TASK
+========================
+
+Continue the story using the provided context and game state.
+
+Write sections that lead directly into the ACTIVE subGoal.
+
+========================
+SUBGOAL HANDLING
+========================
+
+The active subGoal determines how the scene should be written.
+active goal title:
+${activeGoal.title}
+
+activeSubGoal:
+${JSON.stringify(activeSubGoal)}
+
+EXPOSITION
+• Expand the exposition text into narrative.
+• Reveal information or advance the story.
+• If the exposition contains an areaId, treat the scene as arriving in that location.
+
+INTERACTIVE
+• Set the stage for an interaction with a character.
+• Introduce the character naturally.
+• Build context and tension for the upcoming dialogue.
+
+Do NOT resolve the interaction.
+
+DEFEAT-CHARACTER
+• Build tension leading to a confrontation.
+• Show the enemy's presence or threat.
+• End the scene just before the fight begins.
+
+Do NOT resolve the fight.
+
+========================
+STORY CONTINUITY
+========================
+
+Use previousSections to maintain narrative continuity.
+
+Rules:
+• Do not repeat previously described environments unless something changed.
+• Maintain emotional continuity.
+• Characters must remember previous events.
+
+========================
+CHARACTER RULES
+========================
+
+The player character is the user.
+Characters with location "with-player" are traveling companions.
+
+They may:
+• speak
+• react
+• give advice
+
+Restrictions:
+• Do NOT invent new characters
+• Only use provided characterIds
+• Preserve personality consistency
+
+========================
+SECTION TYPES
+========================
+
+Sections are:
+
+EXPOSITION
+Primary story narration.
+
+Guidelines:
+• move the story forward
+• reveal discoveries
+• avoid filler
+• write vividly but efficiently
+
+Visual objects are optional and should only appear during major cinematic moments.
+
+========================
+PACING
+========================
+Return 2–5 sections.
+
+Scenes should:
+• move the story forward
+• lead naturally into the active subGoal
+• build tension or curiosity
+
+========================
+WORLD STATE CHANGES
+========================
+
+You may return changes that modify characters based on what occurred in the sections you wrote.
+Changes must be logical consequences of the narrative. Do not invent arbitrary updates.
+You may include zero or more changes.
+
+A) Character Changes (character-change)
+    Use this when events in the chapter meaningfully alter a character.
+    You may update:
+    location (if non player characters join/leave the player)
+    status
+    skillsAndAbilities (gained, lost, altered) - array will be replaced with your value - so include wisely
+    likes / dislikes (if shifted by events) - array will be replaced as well
+    memories (new important memory formed)
+
+    Examples of valid triggers:
+    A character joins the player → update location to "with-player".
+    A mob is defeated → update status.
+    A traumatic revelation → add a new memory.
+    A betrayal → modify dislikes.
+
+${currentChapter.name === defaultText ? (` B) Chapter changes
+    Please add an entry to the changes array. changeObj:"chapter-change", chapterChangeObj:"name" - come up with a creative name for this chapter.
+`) : ""}
+
+========================
+CHAPTER HANDLING
+========================
+
+Generated sections mainly belong to the current chapter, which is centered around the current MAIN goal (not the subgoal).
+Only start a new chapter if the sections introduce a major narrative shift (new arc, setting change, tonal shift, or significant progression).
+
+If a new chapter is truly warranted, fill out the "forNewChapter" object with a short, creative thematic title based on the next goal. Use this sparingly. Most sections should remain within the current chapter.
+
+========================
+TECHNICAL RULES
+========================
+• Do NOT invent ids.
+• Only use provided characterIds.
+• Only use provided word ids.
+• Stay consistent with the provided world data.
+• Return only structured output.
+
+========================
+STORY CONTEXT
+========================
+
+Story Premise:
+${JSON.stringify(storyPremise)}
+
+Characters:
+${JSON.stringify(characters)}
+
+Goals:
+${JSON.stringify(goals)}
+
+Locations:
+${JSON.stringify(locations)}
+
+Previous Sections:
+${JSON.stringify(prevSections)}`
     console.log(`$instructions`, instructions);
 
     const response = await openai.responses.parse({
@@ -233,8 +345,7 @@ export async function makeChapterSections({ storyPremise, characters, goals, loc
         input: `Generate the next sections of the story.
 
     Continue naturally from the previous sections.
-    Progress the player toward active goals.
-    Respect character locations, area connections, and world state.
+    Respect character locations, and world state.
 
     Return sections and any valid world state changes.`,
         text: {
@@ -245,10 +356,27 @@ export async function makeChapterSections({ storyPremise, characters, goals, loc
     //validate
     const validatedResponse = makeChapterSectionsResponseSchema.parse(response.output_parsed)
 
+    //assign ids
+    validatedResponse.sections = validatedResponse.sections.map(eachSection => {
+        eachSection.id = uuidV4()
+
+        //assign proper language to chosen words
+        eachSection.sectionObj.textArr = eachSection.sectionObj.textArr.map(eachTextArray => {
+            if (typeof eachTextArray === "object") {
+                eachTextArray.languageName = targetLanguage.name
+                eachTextArray.languageDialect = targetLanguage.dialect === undefined ? null : targetLanguage.dialect
+            }
+
+            return eachTextArray
+        })
+
+        return eachSection
+    })
+
     return validatedResponse
 }
 
-export async function makeChatMessagesResponse({ storyPremise, characters, goals, locations, areaConnections, prevSections, prevChatMessages }: { storyPremise: bookType["storyPremise"], characters: characterType[], goals: goalType[], locations: locationType[], areaConnections: areaConnectionType[], prevSections: sectionType[], prevChatMessages: sectionChatMessageType[] }): Promise<makeChatMessagesResponseType> {
+export async function makeChatMessagesResponse({ storyPremise, characters, goals, locations, prevSections, prevChatMessages }: { storyPremise: bookType["storyPremise"], characters: characterType[], goals: goalType[], locations: locationType[], prevSections: sectionType[], prevChatMessages: sectionChatMessageType[] }): Promise<makeChatMessagesResponseType> {
     const instructions = `You are generating in-world character chat responses in a live conversation.
 This should feel like Character AI (c.ai) — emotionally engaging, immersive, personal.
 
@@ -314,9 +442,6 @@ ${JSON.stringify(goals)}
 
 Locations:
 ${JSON.stringify(locations)}
-
-Area Connections:
-${JSON.stringify(areaConnections)}
 
 Previous Sections:
 ${JSON.stringify(prevSections)}

@@ -1,4 +1,4 @@
-import { areaConnectionType, areaType, bookType, chapterType, characterType, chosenLanguageOptionType, locationSchema, locationType } from "@/types"
+import { areaType, bookType, chapterType, characterType, chosenLanguageOptionType, goalType, locationSchema, locationType } from "@/types"
 
 export function makeNativeTargetKey(native: chosenLanguageOptionType, target: chosenLanguageOptionType) {
     return `${native.name.toLowerCase()}${native.dialect !== undefined ? `(${native.dialect.toLowerCase()})` : ""}__${target.name.toLowerCase()}${target.dialect !== undefined ? `(${target.dialect.toLowerCase()})` : ""}`
@@ -15,9 +15,8 @@ export function getImportantCharacters(book: bookType) {
     //add player
     importantCharacters.push(foundPlayer)
 
-    //get companions
-    const charactersWithPlayer = book.characters.filter(eachCharacter => eachCharacter.locationObj.type === "withPlayer")
     //add companions
+    const charactersWithPlayer = book.characters.filter(eachCharacter => eachCharacter.locationObj.type === "withPlayer")
     importantCharacters.push(...charactersWithPlayer)
 
     //get characters in same area
@@ -31,40 +30,31 @@ export function getImportantCharacters(book: bookType) {
 
         return false
     })
-
-    //add other characters
     importantCharacters.push(...otherCharactersInSameArea)
 
     return importantCharacters
 }
 
 export function getImportantLocations(book: bookType, currentAreaId: areaType["id"]) {
-    const areaIdsConnected: areaType["id"][] = []
-
-    book.areaConnections.map(eachAreaConnection => {
-        if (eachAreaConnection.firstId === currentAreaId) {
-            areaIdsConnected.push(eachAreaConnection.secondId)
-        } else if (eachAreaConnection.secondId === currentAreaId) {
-            areaIdsConnected.push(eachAreaConnection.firstId)
-        }
-    })
-
-    //add on og
-    const allRelevantAreaIds = [...areaIdsConnected, currentAreaId]
+    //just containing the areaID
 
     //filter locations/places/areas
     const relevantLocations: locationType[] = book.locations
         .map(eachLocation => {
+
             const filteredPlaces = eachLocation.places
                 .map(eachPlace => {
-                    const filteredAreas = eachPlace.areas.filter(eachArea => allRelevantAreaIds.includes(eachArea.id))
+                    let hasArea = false
 
-                    if (filteredAreas.length === 0) return null
+                    eachPlace.areas.map(eachArea => {
+                        if (eachArea.id === currentAreaId) {
+                            hasArea = true
+                        }
+                    })
 
-                    return {
-                        ...eachPlace,
-                        areas: filteredAreas
-                    }
+                    if (!hasArea) return null
+
+                    return eachPlace
                 })
                 .filter(Boolean)
 
@@ -82,29 +72,24 @@ export function getImportantLocations(book: bookType, currentAreaId: areaType["i
     return relevantLocations
 }
 
-export function getConnectedAreaIds(book: bookType, currentAreaId: areaType["id"]) {
-    const areaIdsConnected: areaType["id"][] = []
 
-    book.areaConnections.map(eachAreaConnection => {
-        if (eachAreaConnection.firstId === currentAreaId) {
-            areaIdsConnected.push(eachAreaConnection.secondId)
-        } else if (eachAreaConnection.secondId === currentAreaId) {
-            areaIdsConnected.push(eachAreaConnection.firstId)
+export function getLatestGoalSubGoal(book: bookType) {
+    let latestGoal: goalType | undefined = undefined
+    let latestSubGoal: goalType["subGoals"][number] | undefined = undefined
+
+    latestGoal = book.goals.find(eachGoal => {
+        if (!eachGoal.complete) {
+            latestSubGoal = eachGoal.subGoals.find(eachSubGoal => !eachSubGoal.complete)
+
+            return eachGoal
         }
     })
 
-    return areaIdsConnected
+    return {
+        latestGoal, latestSubGoal
+    }
+
 }
-
-export function getRelevantAreaConnections(book: bookType, relevantAreaIds: areaType["id"][]) {
-    // console.log(`$relevantAreaIds`, relevantAreaIds);
-
-    const relevantAreaConnections = book.areaConnections.filter(eachAreaConnection => relevantAreaIds.includes(eachAreaConnection.firstId) || relevantAreaIds.includes(eachAreaConnection.secondId))
-
-    // console.log(`$relevantAreaConnections`, relevantAreaConnections);
-    return relevantAreaConnections
-}
-
 export function getRelevantGoals(book: bookType, goalLimit: number, subGoalLimit: number) {
     const latestGoalIndex = book.goals.findIndex(eachGoal => !eachGoal.complete)
     const relevantGoals = book.goals.filter((eachGoal, eachGoalIndex) => {
@@ -186,8 +171,15 @@ export function getPlayer(book: bookType) {
     return book.characters.find(eachCharacter => eachCharacter.type === "player")
 }
 export function getPlayerArea(book: bookType, playerCharacter: characterType) {
-    if (playerCharacter.type !== "player") throw new Error("not a player")
-    if (playerCharacter.locationObj.type === "withPlayer") throw new Error("player can't be with player")
+    if (playerCharacter.type !== "player") {
+        console.log(`$not a player`);
+        return undefined
+    }
+
+    if (playerCharacter.locationObj.type === "withPlayer") {
+        console.log(`$player can't be with player`);
+        return undefined
+    }
 
     const seenPlayerAreaId = playerCharacter.locationObj.areaId
 
@@ -204,13 +196,6 @@ export function getPlayerArea(book: bookType, playerCharacter: characterType) {
     })
 
     return foundArea
-}
-export function getLinkedAreaConnections(book: bookType, currentAreaId: areaType["id"]) {
-    const linkedAreaConnections: areaConnectionType[] = book.areaConnections.filter(eachAreaConnection => {
-        return eachAreaConnection.firstId === currentAreaId || eachAreaConnection.secondId === currentAreaId
-    })
-
-    return linkedAreaConnections
 }
 export function getAreaFromId(book: bookType, areaId: areaType["id"]): areaType | undefined {
     let foundArea: areaType | undefined = undefined

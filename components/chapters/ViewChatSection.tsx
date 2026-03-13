@@ -1,11 +1,12 @@
 import { makeChatMessagesResponse } from "@/serverFunctions/handleChapters"
-import { areaType, bookType, chapterType, characterType, locationType, sectionChatMessageType, sectionType } from "@/types"
+import { areaType, bookType, chapterType, characterType, languageLessonType, locationType, sectionChatMessageType, sectionType, userType } from "@/types"
 import { consoleAndToastError } from "@/utility/consoleErrorWithToast"
-import { ensurePlayer, getConnectedAreaIds, getImportantCharacters, getImportantLocations, getRelevantAreaConnections, getRelevantGoals, getRelevantSections } from "@/utility/contextHelpers"
+import { ensurePlayer, getImportantCharacters, getImportantLocations, getRelevantGoals, getRelevantSections } from "@/utility/contextHelpers"
 import React, { useState, useRef, useEffect } from "react"
 import toast from "react-hot-toast"
+import DisplayTranslatableTexts from "./DisplayTranslatableTexts"
 
-export default function ViewChatSection({ seenSectionId, chatSection, eachChapter, chapters, chapterUpdater, book, syncChapterToServerKeysSet }: { seenSectionId: sectionType["id"], chatSection: Extract<sectionType["sectionObj"], { type: "chat" }>, eachChapter: chapterType, chapters: chapterType[], chapterUpdater: (chapter: chapterType) => void, book: bookType, syncChapterToServerKeysSet: React.Dispatch<React.SetStateAction<(keyof chapterType)[] | undefined>> }) {
+export default function ViewChatSection({ user, seenSectionId, chatSection, eachChapter, chapters, chapterUpdater, book, syncChapterToServerKeysSet, languageLessons }: { user: userType, seenSectionId: sectionType["id"], chatSection: Extract<sectionType["sectionObj"], { type: "chat" }>, eachChapter: chapterType, chapters: chapterType[], chapterUpdater: (chapter: chapterType) => void, book: bookType, syncChapterToServerKeysSet: React.Dispatch<React.SetStateAction<(keyof chapterType)[] | undefined>>, languageLessons: { [key: string]: languageLessonType } }) {
     const [input, setInput] = useState("")
     const messageContRef = useRef<HTMLDivElement | null>(null)
 
@@ -43,20 +44,12 @@ export default function ViewChatSection({ seenSectionId, chatSection, eachChapte
 
 
             //add my message
-            const myMessage: sectionChatMessageType = { characterId: foundPlayer.id, message: input }
+            const myMessage: sectionChatMessageType = { characterId: foundPlayer.id, messageArr: [input] }
 
 
             //filter locations/places/areas
             const currentAreaId = foundPlayer.locationObj.areaId
             const relevantLocations: locationType[] = getImportantLocations(book, currentAreaId)
-            const areaIdsConnected: areaType["id"][] = getConnectedAreaIds(book, currentAreaId)
-            const allRelevantAreaIds = [...areaIdsConnected, currentAreaId]
-
-
-
-
-            //relevant area connections
-            const relevantAreaConnections = getRelevantAreaConnections(book, allRelevantAreaIds)
 
 
 
@@ -77,7 +70,6 @@ export default function ViewChatSection({ seenSectionId, chatSection, eachChapte
                 storyPremise: seenStoryPremise,
                 characters: importantCharacters,
                 locations: relevantLocations,
-                areaConnections: relevantAreaConnections,
                 goals: relevantGoals,
                 prevSections: prevSections,
                 prevChatMessages: [...chatSection.messages.slice(0, 100), myMessage] //up to 100 past messages
@@ -159,7 +151,7 @@ export default function ViewChatSection({ seenSectionId, chatSection, eachChapte
                                 <b>{seenCharacter.name}{seenCharacter.type === "player" ? " (you)" : ""}</b>
                             )}
 
-                            <p>{eachMessage.message}</p>
+                            <DisplayTranslatableTexts user={user} translatableTexts={eachMessage.messageArr} languageLessons={languageLessons} />
                         </div>
                     )
                 })}

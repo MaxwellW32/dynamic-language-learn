@@ -39,6 +39,19 @@ export type languageLessonType = {
     grammar: grammarJSONType,
 }
 
+export type interactedLanguageLessonsType = {
+    [key: string]: {
+        dictionary: {
+            seen: dictionaryJSONType,
+            new: dictionaryJSONType,
+        },
+        grammar: {
+            seen: grammarJSONType,
+            new: grammarJSONType,
+        },
+    }
+}
+
 
 
 
@@ -87,13 +100,6 @@ export type searchObjType<T> = {
 
 
 //locations
-export const areaConnectionSchema = z.object({
-    firstId: z.string().min(1),
-    secondId: z.string().min(1),
-    travelDescription: z.string().min(1)
-})
-export type areaConnectionType = z.infer<typeof areaConnectionSchema>
-
 export const areaSchema = z.object({
     //e.g home-village bar kitchen
     id: z.string().min(1),
@@ -211,30 +217,49 @@ export type goalType = z.infer<typeof goalSchema>
 
 
 //sections
+export const translatableTextSchema = z.union([z.object({ type: z.literal("fw"), id: z.string().min(1), languageName: chosenLanguageOptionSchema.shape.name, languageDialect: z.string().min(1).nullable() }), z.string()])
+export type translatableTextType = z.infer<typeof translatableTextSchema>
+
+export const expositionSectionSchema = z.object({
+    //regular text ai returns when writing story
+    type: z.literal("exposition"),
+    textArr: translatableTextSchema.array(),
+    visual: z.object({
+        description: z.string().min(1),
+        src: z.string(),
+    }).nullable()
+})
+export type expositionSectionType = z.infer<typeof expositionSectionSchema>
+
 export const sectionChatMessageSchema = z.object({
     characterId: characterSchema.shape.id,
-    message: z.string().min(1)
+    messageArr: translatableTextSchema.array()
 })
 export type sectionChatMessageType = z.infer<typeof sectionChatMessageSchema>
+
+export const chatSectionSchema = z.object({
+    //chat room created - relax talk to your fav characters
+    type: z.literal("chat"),
+    characterIds: characterSchema.shape.id.array(),
+    messages: sectionChatMessageSchema.array(),
+    interactiveSubGoalId: z.string().min(1).nullable(),//has interactive subGoal id or null
+})
+export type chatSectionType = z.infer<typeof chatSectionSchema>
+
+export const gameModeSectionSchema = z.object({
+    //chat room created - relax talk to your fav characters
+    type: z.literal("gameMode"),
+    defeatCharacterSubGoalId: z.string().min(1).nullable(),//has defeatCharacter subGoal id or null
+})
+export type gameModeSectionType = z.infer<typeof gameModeSectionSchema>
+
 
 export const sectionSchema = z.object({
     id: z.string().min(1),
     sectionObj: z.union([
-        z.object({
-            //regular text ai returns when writing story
-            type: z.literal("exposition"),
-            text: z.string().min(1),
-            visual: z.object({
-                description: z.string().min(1),
-                src: z.string(),
-            }).nullable()
-        }),
-        z.object({
-            //chat room created - relax talk to your fav characters
-            type: z.literal("chat"),
-            characterIds: characterSchema.shape.id.array(),
-            messages: sectionChatMessageSchema.array()
-        })
+        expositionSectionSchema,
+        chatSectionSchema,
+        gameModeSectionSchema,
     ]),
 })
 export type sectionType = z.infer<typeof sectionSchema>
@@ -351,12 +376,14 @@ export type makeGoalsResponseType = z.infer<typeof makeGoalsResponseSchema>
 
 
 //make chapter sections
-export type sectionLoaderType = {
-    wantedAreaId?: areaType["id"],
-} | undefined
+// export type sectionLoaderType = {
+//     wantedAreaId?: areaType["id"],
+// } | undefined
 
 export const makeChapterSectionsResponseSchema = z.object({
-    sections: sectionSchema.array(),
+    sections: sectionSchema.extend({//gpt only allowed to reurn exposition sections - i'll handle other types
+        sectionObj: z.union([expositionSectionSchema])
+    }).array(),
     forNewChapter: z.object({
         name: z.string().min(1)
     }).nullable(),
@@ -371,38 +398,6 @@ export const makeChapterSectionsResponseSchema = z.object({
                 likes: characterSchema.shape.likes.nullable(),
                 dislikes: characterSchema.shape.dislikes.nullable(),
                 memories: characterSchema.shape.memories.nullable(),
-            }),
-            z.object({
-                type: z.literal("player-change"),
-                characterId: characterSchema.shape.id,
-                playerChangeObj: z.union([
-                    z.object({//if player can change location
-                        type: z.literal("location"),
-                        locationChangeObj: z.union([
-                            z.object({
-                                type: z.literal("success"),
-                                newAreaId: areaSchema.shape.id,
-                            }),
-                            z.object({
-                                type: z.literal("failed"),
-                                reason: z.string().min(1)
-                            }),
-                        ]),
-                    }),
-                ]),
-            }),
-            z.object({
-                type: z.literal("subGoal-change"),
-                subGoalId: goalSchema.shape.id,
-                goalChangeObj: z.union([
-                    z.object({//will mark successful
-                        type: z.literal("success"),
-                    }),
-                    z.object({//replace all sub goals with new way to accomplsh main goal
-                        type: z.literal("failed"),
-                        newSubGoals: goalSchema.shape.subGoals
-                    }),
-                ]),
             }),
             z.object({
                 type: z.literal("chapter-change"),
@@ -520,10 +515,10 @@ export type updateBookType = z.infer<typeof updateBookSchema>
 export const chapterSchema = z.object({
     //each chapter stores info for the book
     id: z.string().min(1),
-    bookId: bookSchema.shape.id,
+    dateCreated: dateSchema,
 
+    bookId: bookSchema.shape.id,
     name: z.string().min(1),
-    index: z.number(),
     sections: sectionSchema.array(),
     shortSummary: z.string(),
 })
@@ -531,8 +526,8 @@ export type chapterType = z.infer<typeof chapterSchema> & {
     fromBook?: bookType,
 }
 
-export const newChapterSchema = chapterSchema.omit({})
+export const newChapterSchema = chapterSchema.omit({ id: true, dateCreated: true })
 export type newChapterType = z.infer<typeof newChapterSchema>
 
-export const updateChapterSchema = chapterSchema.omit({})
+export const updateChapterSchema = chapterSchema.omit({ id: true, dateCreated: true })
 export type updateChapterType = z.infer<typeof updateChapterSchema>

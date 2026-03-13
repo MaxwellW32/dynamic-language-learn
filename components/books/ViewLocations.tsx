@@ -1,14 +1,11 @@
 "use client"
-import { areaConnectionType, areaType, bookType, locationType } from '@/types'
+import { areaType, bookType, locationType } from '@/types'
 import { consoleAndToastError } from '@/utility/consoleErrorWithToast'
-import { getAreaFromId, getLinkedAreaConnections, getPlayer, getPlayerArea } from '@/utility/contextHelpers'
-import { sectionLoadersGlobal } from '@/utility/globalState'
+import { getAreaFromId, getPlayer, getPlayerArea } from '@/utility/contextHelpers'
 import { useAtom } from 'jotai'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 
 export default function ViewLocations({ book, locations }: { book: bookType, locations: locationType[] }) {
-    const [, sectionLoadersSet] = useAtom(sectionLoadersGlobal)
-
     const [currentlySelectedAreaId, currentlySelectedAreaIdSet] = useState<areaType["id"]>("")
     const currentlySelectedArea = useMemo<areaType | undefined>(() => {
         let foundArea: areaType | undefined = undefined

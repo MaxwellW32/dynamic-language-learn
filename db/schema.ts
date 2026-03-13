@@ -1,7 +1,7 @@
 import { relations } from "drizzle-orm";
 import { boolean, timestamp, pgTable, text, primaryKey, integer, index, json } from "drizzle-orm/pg-core"
 import type { AdapterAccountType } from "@auth/core/adapters"
-import { areaConnectionType, bookType, characterType, goalType, locationType, sectionType, userType } from "@/types";
+import { bookType, characterType, goalType, locationType, sectionType, userType } from "@/types";
 import { defaultText } from "@/lib/defaultData";
 
 export const users = pgTable("users", {
@@ -32,7 +32,7 @@ export const books = pgTable("books", {
     id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
     dateCreated: timestamp("dateCreated", { mode: "date" }).notNull().defaultNow(),
     name: text("name").notNull().default(defaultText),
-    targetLanguages: json("targetLanguages").$type<bookType["targetLanguages"][]>().default([]).notNull(),
+    targetLanguages: json("targetLanguages").$type<bookType["targetLanguages"]>().default([]).notNull(),
     storyPremise: text("storyPremise").notNull().default(defaultText),
     locations: json("locations").$type<locationType[]>().default([]).notNull(),
     characters: json("characters").$type<characterType[]>().default([]).notNull(),
@@ -60,10 +60,10 @@ export const bookRelations = relations(books, ({ one, many }) => ({
 
 export const chapters = pgTable("chapters", {
     id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-    bookId: text("bookId").notNull().references(() => books.id),
+    dateCreated: timestamp("dateCreated", { mode: "date" }).notNull().defaultNow(),
 
+    bookId: text("bookId").notNull().references(() => books.id),
     name: text("name").notNull(),
-    index: integer("index").notNull(),
     sections: json("sections").$type<sectionType[]>().default([]).notNull(),
     shortSummary: text("shortSummary").notNull(),
 },
@@ -71,6 +71,7 @@ export const chapters = pgTable("chapters", {
         return {
             chapterIdIndex: index("chapterIdIndex").on(table.id),
             chapterBookIdIndex: index("chapterBookIdIndex").on(table.bookId),
+            chapterBookDateCreatedIndex: index("chapterBookDateCreatedIndex").on(table.dateCreated),
         };
     })
 export const chapterRelations = relations(chapters, ({ one }) => ({

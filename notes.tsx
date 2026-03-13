@@ -1,26 +1,13 @@
 //To Do
 //
-//book makes 100 goals
-//eachsub goal is what's used to generate
-//exposition - themes, info, character dialogue - ai has context to make it match
-//interact - ai sets context - sets up understanding that character is to be talked to - interact screen shown in section
-//defeat charcter - ai sets context - gamemodes shown -
-//
-//
-//
-//changes:
-//ensure prompts working for each section
-//make small demo - 5 goals - sub goals
-//section ai doesn't change subGoals
-//
-//
-//
-//
-//
-//
-//
-//
-//
+//add chat button
+//make ai return language words
+//fill out gameModes
+//fix - entries in types repalce with camelCase
+//make grammar sometimes spawn
+//make gpt able to send its own translations
+//add mastery level
+//maybe make gpt not return id's
 //
 //
 //

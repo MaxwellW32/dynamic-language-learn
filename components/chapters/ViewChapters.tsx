@@ -1,20 +1,22 @@
 "use client"
 import { addChapter, getChapters, getSpecificChapter, makeChapterSections, updateChapter } from '@/serverFunctions/handleChapters'
-import { areaConnectionType, areaType, bookType, chapterSchema, chapterType, characterType, locationSchema, locationType, newChapterType } from '@/types'
+import { bookType, chapterSchema, chapterType, characterType, goalType, interactedLanguageLessonsType, languageLessonType, locationType, newChapterType, sectionType, userType } from '@/types'
 import { consoleAndToastError } from '@/utility/consoleErrorWithToast'
 import React, { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
-import { v4 } from 'uuid'
+import { v4 as uuidV4 } from 'uuid'
 import ShowMore from '../showMore/ShowMore'
 import ViewChatSection from './ViewChatSection'
-import { ensurePlayer, getConnectedAreaIds, getImportantCharacters, getImportantLocations, getRelevantAreaConnections, getRelevantGoals, getRelevantSections } from '@/utility/contextHelpers'
+import { ensurePlayer, getImportantCharacters, getImportantLocations, getLatestGoalSubGoal, getRelevantGoals, getRelevantSections } from '@/utility/contextHelpers'
 import { useAtom } from 'jotai'
-import { sectionLoadersGlobal } from '@/utility/globalState'
 import { defaultText } from '@/lib/defaultData'
+import DisplayTranslatableTexts from './DisplayTranslatableTexts'
 
-type makeNewChapterPropsType = { prevChapter: chapterType | undefined, chapterStarter: Partial<chapterType>, notify: boolean }
+type makeNewChapterPropsType = { chapterStarter: Partial<chapterType>, sections: sectionType[], notify: boolean }
 
-export default function ViewChapters({ book, bookSet, chapters, chaptersSet, syncBookToServerKeysSet }: { book: bookType, bookSet: React.Dispatch<React.SetStateAction<bookType>>, chapters: chapterType[] | undefined, chaptersSet: React.Dispatch<React.SetStateAction<chapterType[] | undefined>>, syncBookToServerKeysSet: React.Dispatch<React.SetStateAction<(keyof bookType)[] | undefined>> }) {
+export default function ViewChapters({ user, book, bookSet, syncBookToServerKeysSet, interactedLanguageLessons, languageLessons }: { user: userType, book: bookType, bookSet: React.Dispatch<React.SetStateAction<bookType>>, syncBookToServerKeysSet: React.Dispatch<React.SetStateAction<(keyof bookType)[] | undefined>>, interactedLanguageLessons: interactedLanguageLessonsType, languageLessons: { [key: string]: languageLessonType } }) {
+    const [chapters, chaptersSet] = useState<chapterType[] | undefined>(undefined)
+
     //get chapters
     useEffect(() => {
         const search = async () => {
@@ -25,8 +27,16 @@ export default function ViewChapters({ book, bookSet, chapters, chaptersSet, syn
                     chaptersSet(seenChapters)
 
                 } else {
-                    const seenChapter = await getSpecificChapter(book.currentChapterId)
-                    if (seenChapter === undefined) throw new Error("not seeing chapter")
+                    let seenChapter = await getSpecificChapter(book.currentChapterId)
+                    if (seenChapter === undefined) {
+                        console.log(`$not seeing specific chapter`)
+
+                        //again bulk search
+                        const seenChapters = await getChapters({ bookId: book.id })
+                        chaptersSet(seenChapters)
+
+                        return
+                    }
 
                     chaptersSet([seenChapter])
                 }
@@ -42,11 +52,9 @@ export default function ViewChapters({ book, bookSet, chapters, chaptersSet, syn
     //make new chapter
     async function makeNewChapter(makeNewChapterProps: makeNewChapterPropsType) {
         const newChapter: newChapterType = {
-            id: v4(),
             bookId: book.id,
-            index: makeNewChapterProps.prevChapter !== undefined ? makeNewChapterProps.prevChapter.index + 1 : 0,
             name: defaultText,
-            sections: [],
+            sections: makeNewChapterProps.sections,
             shortSummary: ""
         }
 
@@ -55,23 +63,23 @@ export default function ViewChapters({ book, bookSet, chapters, chaptersSet, syn
             newChapter.name = makeNewChapterProps.chapterStarter.name
         }
 
-        //local change
-        chaptersSet(prevChapters => {
-            if (prevChapters === undefined) return [newChapter]
-
-            //add new
-            const newChapters = [...prevChapters, newChapter]
-
-            return newChapters
-        })
-
         //sync to server
-        await addChapter(newChapter)
+        const addedChapter = await addChapter(newChapter)
 
         //notify
         if (makeNewChapterProps.notify) {
             toast.success("chapter added!")
         }
+
+        //local change
+        chaptersSet(prevChapters => {
+            if (prevChapters === undefined) return [addedChapter]
+
+            //add new
+            const newChapters = [...prevChapters, addedChapter]
+
+            return newChapters
+        })
     }
 
     return (
@@ -80,7 +88,7 @@ export default function ViewChapters({ book, bookSet, chapters, chaptersSet, syn
                 <>
                     {chapters.map(eachChapter => {
                         return (
-                            <ViewChapter key={eachChapter.id} eachChapter={eachChapter} chapters={chapters} book={book} bookSet={bookSet} syncBookToServerKeysSet={syncBookToServerKeysSet}
+                            <ViewChapter key={eachChapter.id} user={user} eachChapter={eachChapter} chapters={chapters} book={book} bookSet={bookSet} syncBookToServerKeysSet={syncBookToServerKeysSet} interactedLanguageLessons={interactedLanguageLessons} languageLessons={languageLessons}
                                 chapterUpdater={(updatedChapter) => {
                                     //local change
                                     chaptersSet(prevChapters => {
@@ -106,8 +114,8 @@ export default function ViewChapters({ book, bookSet, chapters, chaptersSet, syn
                         <button className='button2' style={{ justifySelf: "flex-end" }}
                             onClick={() => {
                                 makeNewChapter({
-                                    prevChapter: undefined,
                                     chapterStarter: {},
+                                    sections: [],
                                     notify: true
                                 })
                             }}
@@ -119,10 +127,9 @@ export default function ViewChapters({ book, bookSet, chapters, chaptersSet, syn
     )
 }
 
-function ViewChapter({ eachChapter, chapters, chapterUpdater, book, bookSet, syncBookToServerKeysSet, makeNewChapter }: { eachChapter: chapterType, chapters: chapterType[], chapterUpdater: (chapter: chapterType) => void, book: bookType, bookSet: React.Dispatch<React.SetStateAction<bookType>>, syncBookToServerKeysSet: React.Dispatch<React.SetStateAction<(keyof bookType)[] | undefined>>, makeNewChapter(makeNewChapterProps: makeNewChapterPropsType): Promise<void> }) {
+function ViewChapter({ user, eachChapter, chapters, chapterUpdater, book, bookSet, syncBookToServerKeysSet, makeNewChapter, interactedLanguageLessons, languageLessons }: { user: userType, eachChapter: chapterType, chapters: chapterType[], chapterUpdater: (chapter: chapterType) => void, book: bookType, bookSet: React.Dispatch<React.SetStateAction<bookType>>, syncBookToServerKeysSet: React.Dispatch<React.SetStateAction<(keyof bookType)[] | undefined>>, makeNewChapter(makeNewChapterProps: makeNewChapterPropsType): Promise<void>, interactedLanguageLessons: interactedLanguageLessonsType, languageLessons: { [key: string]: languageLessonType } }) {
     const [syncChapterToServerKeys, syncChapterToServerKeysSet] = useState<(keyof chapterType)[] | undefined>(undefined)
     const syncChapterToServerDebounce = useRef<{ [key: string]: NodeJS.Timeout | undefined }>({})
-    const [sectionLoaders] = useAtom(sectionLoadersGlobal)
 
     //sync chapter to server
     useEffect(() => {
@@ -161,15 +168,6 @@ function ViewChapter({ eachChapter, chapters, chapterUpdater, book, bookSet, syn
 
     }, [syncChapterToServerKeys])
 
-    //respond to global add section events
-    useEffect(() => {
-        if (sectionLoaders === undefined) return
-
-        //run func
-        addSectionFunc()
-
-    }, [sectionLoaders])
-
     async function addSectionFunc() {
         try {
             //add context here: player, characters with and in area - current goals - selected area to move
@@ -202,21 +200,21 @@ function ViewChapter({ eachChapter, chapters, chapterUpdater, book, bookSet, syn
             //get areas connected to it
             const currentAreaId = foundPlayer.locationObj.areaId
             const relevantLocations: locationType[] = getImportantLocations(book, currentAreaId)
-            const areaIdsConnected: areaType["id"][] = getConnectedAreaIds(book, currentAreaId)
-            const allRelevantAreaIds = [...areaIdsConnected, currentAreaId]
-
-
-
-            //relevant area connections
-            //only area connections linked to relevant locations
-            const relevantAreaConnections = getRelevantAreaConnections(book, allRelevantAreaIds)
-
-
+            console.log(`$relevantLocations`, relevantLocations);
 
 
             //goals
             //active goal, next 3 goals - prev goal
             const relevantGoals = getRelevantGoals(book, 3, 7)
+            const latestGoalSubGoal = getLatestGoalSubGoal(book)
+            console.log(`$relevantGoals`, relevantGoals);
+            console.log(`$latestGoalSubGoal`, latestGoalSubGoal);
+            if (latestGoalSubGoal.latestGoal === undefined || latestGoalSubGoal.latestSubGoal === undefined) {
+                console.log(`$no more goals/subGoals`);
+                return
+            }
+            const latestGoal = latestGoalSubGoal.latestGoal
+            const latestSubGoal = latestGoalSubGoal.latestSubGoal as goalType["subGoals"][number]
 
 
 
@@ -227,20 +225,96 @@ function ViewChapter({ eachChapter, chapters, chapterUpdater, book, bookSet, syn
 
 
 
+            //choose one target language at random
+            const targetLanguageToGenerate = book.targetLanguages[Math.floor(Math.random() * book.targetLanguages.length)]
+
             //get response
             const newSectionResponse = await makeChapterSections({
                 storyPremise: seenStoryPremise,
                 characters: importantCharacters,
                 locations: relevantLocations,
-                areaConnections: relevantAreaConnections,
                 goals: relevantGoals,
                 prevSections: prevSections,
                 currentChapter: eachChapter,
-                sectionLoader: sectionLoaders
+                nativeLanguage: user.languageSettings.native,
+                targetLanguage: targetLanguageToGenerate,
+                interactedLanguageLessons: interactedLanguageLessons,
+                masteryLevel: 0,
             })
             console.log(`$newSectionResponse`, newSectionResponse)
 
+            const bookKeysToUpdate: (keyof bookType)[] = []
             const chapterKeysToUpdate: (keyof chapterType)[] = []
+
+            const sectionsToAdd: sectionType[] = newSectionResponse.sections
+
+            //update goals/subGoals for expositions
+            bookSet(prevBook => {
+                const newBook = { ...prevBook }
+
+                newBook.goals = newBook.goals.map(eachGoal => {
+                    if (eachGoal.id === latestGoal.id) {
+                        //react
+                        eachGoal = { ...eachGoal }
+
+                        //update exposition subGoal as complete
+                        eachGoal.subGoals = eachGoal.subGoals.map(eachSubGoal => {
+                            //react
+                            eachSubGoal = { ...eachSubGoal }
+
+                            if (eachSubGoal.id === latestSubGoal.id && eachSubGoal.subGoalTypeObj.type === "exposition") {
+                                eachSubGoal.complete = true
+                            }
+
+                            return eachSubGoal
+                        })
+
+                        //if all subGoals complete mark goal as complete
+                        let allSubGoalsComplete = true
+                        eachGoal.subGoals.map(eachSubGoal => {
+                            if (!eachSubGoal.complete) {
+                                allSubGoalsComplete = false
+                            }
+                        })
+                        if (allSubGoalsComplete) {
+                            eachGoal.complete = true
+                        }
+                    }
+
+                    return eachGoal
+                })
+
+                //signify needed update
+                bookKeysToUpdate.push("goals")
+
+                return newBook
+            })
+
+            //add proper sections - interactive/defeatCharacter
+            if (latestSubGoal.subGoalTypeObj.type === "interactive") {
+                const newChatSection: sectionType = {
+                    id: uuidV4(),
+                    sectionObj: {
+                        type: "chat",
+                        characterIds: importantCharacters.map(each => each.id),
+                        interactiveSubGoalId: latestSubGoal.id,
+                        messages: [],
+                    }
+                }
+
+                sectionsToAdd.push(newChatSection)
+
+            } else if (latestSubGoal.subGoalTypeObj.type === "defeat-character") {
+                const newGameModeSection: sectionType = {
+                    id: uuidV4(),
+                    sectionObj: {
+                        type: "gameMode",
+                        defeatCharacterSubGoalId: latestSubGoal.id
+                    }
+                }
+
+                sectionsToAdd.push(newGameModeSection)
+            }
 
             //local add - chapter sections
             const updatedLocalChapter = { ...eachChapter }
@@ -249,13 +323,14 @@ function ViewChapter({ eachChapter, chapters, chapterUpdater, book, bookSet, syn
             if (newSectionResponse.forNewChapter !== null) {
                 //send up new chapter
                 makeNewChapter({
-                    prevChapter: eachChapter,
                     chapterStarter: { name: newSectionResponse.forNewChapter.name },
+                    sections: sectionsToAdd,
                     notify: false
                 })
+
             } else {
                 //add to current chapter
-                updatedLocalChapter.sections = [...updatedLocalChapter.sections, ...newSectionResponse.sections]
+                updatedLocalChapter.sections = [...updatedLocalChapter.sections, ...sectionsToAdd]
                 chapterKeysToUpdate.push("sections")
             }
 
@@ -303,95 +378,8 @@ function ViewChapter({ eachChapter, chapters, chapterUpdater, book, bookSet, syn
                                 return eachCharacter
                             })
 
-                            //server book sync
-                            syncBookToServerKeysSet(["characters"])
-                        }
-
-                        //player changes
-                        if (seenChangeObj.type === "player-change") {
-                            const { characterId, playerChangeObj } = seenChangeObj
-
-                            newBook.characters = newBook.characters.map(eachCharacter => {
-                                if (eachCharacter.id === characterId) {
-                                    //react
-                                    eachCharacter = { ...eachCharacter }
-
-                                    if (playerChangeObj.type === "location" && eachCharacter.locationObj.type === "area") {
-                                        if (playerChangeObj.locationChangeObj.type === "success") {
-                                            //react
-                                            eachCharacter.locationObj = { ...eachCharacter.locationObj }
-
-                                            eachCharacter.locationObj.areaId = playerChangeObj.locationChangeObj.newAreaId
-
-                                        } else if (playerChangeObj.locationChangeObj.type === "failed") {
-                                            toast.error("can't change location")
-                                            toast.error(playerChangeObj.locationChangeObj.reason)
-                                        }
-                                    }
-
-                                    return eachCharacter
-                                }
-
-                                return eachCharacter
-                            })
-
-                            //server book sync
-                            syncBookToServerKeysSet(["characters"])
-                        }
-
-                        //goal / subGoal changes
-                        if (seenChangeObj.type === "subGoal-change") {
-                            const { subGoalId, goalChangeObj } = seenChangeObj
-
-                            newBook.goals = newBook.goals.map(eachGoal => {
-                                //react
-                                eachGoal = { ...eachGoal }
-
-                                const subGoalIndex = eachGoal.subGoals.findIndex(eachSubGoal => eachSubGoal.id === subGoalId)
-                                if (subGoalIndex === -1) return eachGoal
-
-                                // SUCCESS
-                                if (goalChangeObj.type === "success") {
-                                    eachGoal.subGoals = eachGoal.subGoals.map(eachSubGoal => {
-                                        if (eachSubGoal.id === subGoalId) {
-                                            return {
-                                                ...eachSubGoal,
-                                                complete: true
-                                            }
-                                        }
-
-                                        return eachSubGoal
-                                    })
-
-                                    return eachGoal
-                                }
-
-                                // FAILED
-                                if (goalChangeObj.type === "failed") {
-                                    const updatedSubGoals = [...eachGoal.subGoals]
-
-                                    // mark failed subGoal
-                                    updatedSubGoals[subGoalIndex] = {
-                                        ...updatedSubGoals[subGoalIndex],
-                                        complete: true,
-                                        failed: true
-                                    }
-
-                                    // insert new subGoals AFTER failed one
-                                    updatedSubGoals.splice(subGoalIndex + 1, 0, ...goalChangeObj.newSubGoals)
-
-                                    return {
-                                        ...eachGoal,
-                                        subGoals: updatedSubGoals,
-                                        complete: true
-                                    }
-                                }
-
-                                return eachGoal
-                            })
-
-                            //server book sync
-                            syncBookToServerKeysSet(["goals"])
+                            //signify needed update
+                            bookKeysToUpdate.push("characters")
                         }
 
                         return newBook
@@ -418,6 +406,9 @@ function ViewChapter({ eachChapter, chapters, chapterUpdater, book, bookSet, syn
             //server chapter sync
             syncChapterToServerKeysSet(chapterKeysToUpdate)
 
+            //server book sync
+            syncBookToServerKeysSet(bookKeysToUpdate)
+
         } catch (error) {
             consoleAndToastError(error)
         }
@@ -434,7 +425,7 @@ function ViewChapter({ eachChapter, chapters, chapterUpdater, book, bookSet, syn
                     <div key={eachSection.id} className='simpleContainer'>
                         {eachSection.sectionObj.type === "exposition" && (
                             <>
-                                <p>{eachSection.sectionObj.text}</p>
+                                <DisplayTranslatableTexts user={user} translatableTexts={eachSection.sectionObj.textArr} languageLessons={languageLessons} />
 
                                 {eachSection.sectionObj.visual !== null && (
                                     <ShowMore
@@ -449,7 +440,7 @@ function ViewChapter({ eachChapter, chapters, chapterUpdater, book, bookSet, syn
 
                         {eachSection.sectionObj.type === "chat" && (
                             <>
-                                <ViewChatSection seenSectionId={eachSection.id} chatSection={eachSection.sectionObj} book={book} eachChapter={eachChapter} chapters={chapters} chapterUpdater={chapterUpdater} syncChapterToServerKeysSet={syncChapterToServerKeysSet} />
+                                <ViewChatSection user={user} seenSectionId={eachSection.id} chatSection={eachSection.sectionObj} book={book} eachChapter={eachChapter} chapters={chapters} chapterUpdater={chapterUpdater} syncChapterToServerKeysSet={syncChapterToServerKeysSet} languageLessons={languageLessons} />
                             </>
                         )}
                     </div>

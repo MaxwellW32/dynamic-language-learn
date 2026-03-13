@@ -213,9 +213,7 @@ ${storyPremise}
 }
 
 async function makeCharacters({ prompt, locations, prevCharacters }: makeCharactersBodyType): Promise<makeCharactersResponseType> {
-    const response = await openai.responses.parse({
-        model: chosenGptModel,
-        instructions: `You are generating new characters for this world.
+    const baseInstructions = `You are generating new characters for this world.
 Locations:
 ${JSON.stringify(locations)}
 
@@ -230,7 +228,7 @@ CORE RULES:
 
 2) PLAYER RULE
 There can only ever be ONE player character type in the entire world. That will be the user reading the book.
-Please create if it does not exist in "Previously Generated Characters", do not create another.
+Please create if it does not exist in "Previously Generated Characters", do not create another. Player location has to be an areaId, cannot be "withPlayer"
 
 3) PURPOSE DRIVEN
 Each character must serve a clear gameplay purpose:
@@ -249,7 +247,12 @@ Each character must:
 Example:
 - A blacksmith belongs in a forge area.
 - A bandit belongs on a road or forest edge.
-- A boss might live in a throne room, cave, tower, or dungeon.`,
+- A boss might live in a throne room, cave, tower, or dungeon.`
+    console.log(`$baseInstructions`, baseInstructions);
+
+    const response = await openai.responses.parse({
+        model: chosenGptModel,
+        instructions: baseInstructions,
         input: prompt,
         text: {
             format: zodTextFormat(makeCharactersResponseSchema, "makeCharactersResponse"),
@@ -287,8 +290,6 @@ The final output must feel like a well-paced novel combined with a playable RPG 
 ========================
 STORY STRUCTURE
 ========================
-
-Generate up to 20 major goals that map the entire story arc.
 
 Each goal must belong to one of the following narrative stages:
 - introduction
@@ -330,6 +331,14 @@ Each goal must:
 - Avoid filler or generic objectives.
 
 Goals should feel like major chapters of a novel.
+Generate up to 20 major goals that map the entire story arc.
+
+Avoid repeating identical patterns.
+Examples of bad structure:
+exposition → exposition → exposition → exposition → exposition
+
+Good structure example:
+exposition → interactive → exposition → defeat-character → interactive → exposition
 
 ========================
 SUBGOAL STRUCTURE
@@ -337,7 +346,6 @@ SUBGOAL STRUCTURE
 Each goal must contain roughly 15 subGoals.
 SubGoals represent the individual actions the player performs.
 They should form a logical sequence that progresses the player through the goal.
-
 
 ========================
 SUBGOAL TYPES

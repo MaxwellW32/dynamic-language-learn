@@ -1,6 +1,6 @@
 "use client"
 import styles from "./style.module.css"
-import { areaConnectionType, areaType, bookSchema, bookType, chapterType, characterType, dictionaryJSONType, gptApiFunctionCallOptionType, grammarJSONType, languageLessonType, locationType, makeCharactersBodySchema, makeCharactersBodyType, makeCharactersResponseSchema, makeGoalsBodySchema, makeGoalsBodyType, makeGoalsResponseSchema, makeLocationsBodySchema, makeLocationsBodyType, makeLocationsResponseSchema, makeStoryPremiseBodySchema, makeStoryPremiseBodyType, makeStoryPremiseResponseSchema, placeType, promptInfoType, userType } from '@/types'
+import { areaType, bookSchema, bookType, characterType, dictionaryJSONType, gptApiFunctionCallOptionType, grammarJSONType, interactedLanguageLessonsType, languageLessonType, locationType, makeCharactersBodySchema, makeCharactersBodyType, makeCharactersResponseSchema, makeGoalsBodySchema, makeGoalsBodyType, makeGoalsResponseSchema, makeLocationsBodySchema, makeLocationsBodyType, makeLocationsResponseSchema, makeStoryPremiseBodySchema, makeStoryPremiseBodyType, makeStoryPremiseResponseSchema, placeType, promptInfoType, userType } from '@/types'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import ShowMore from '../showMore/ShowMore'
 import EditPromptInfo from '../promptInfo/EditPromptInfo'
@@ -24,18 +24,6 @@ export default function ReadBook({ seenUser, seenBook }: { seenUser: userType, s
     const [book, bookSet] = useState({ ...seenBook })
     const [languageLessons, languageLessonsSet] = useState<{ [key: string]: languageLessonType }>({})
 
-    type interactedLanguageLessonsType = {
-        [key: string]: {
-            dictionary: {
-                seen: dictionaryJSONType,
-                new: dictionaryJSONType,
-            },
-            grammar: {
-                seen: grammarJSONType,
-                new: grammarJSONType,
-            },
-        }
-    }
     const sortedLanguageLessons = useMemo<interactedLanguageLessonsType>(() => {
         const newInteractedLanguageLessons: interactedLanguageLessonsType = {}
         //amt of mastery tracked in user obj
@@ -115,7 +103,7 @@ export default function ReadBook({ seenUser, seenBook }: { seenUser: userType, s
     const [showingSetupMenu, showingSetupMenuSet] = useState(!book.readyToRead)
     const [showingSideMenu, showingSideMenuSet] = useState(false)
 
-    const [chapters, chaptersSet] = useState<chapterType[] | undefined>(undefined)
+    // const [chapters, chaptersSet] = useState<chapterType[] | undefined>(undefined)
 
     const [createStoryPremisePromptInfo, createStoryPremisePromptInfoSet] = useState<promptInfoType>({
         prompt: `Generate a compelling adventure story premise for an interactive quest-based storybook game.`,
@@ -190,7 +178,6 @@ The premise should feel like the opening description of an epic interactive adve
             const combinedKeyString = syncBookToServerKeys.length === 0 ? "general" : syncBookToServerKeys.join("-")
 
             if (syncBookToServerDebounce.current[combinedKeyString]) clearTimeout(syncBookToServerDebounce.current[combinedKeyString])
-
             syncBookToServerDebounce.current[combinedKeyString] = setTimeout(async () => {
                 let validatedBook: Partial<bookType>
 
@@ -208,7 +195,7 @@ The premise should feel like the opening description of an epic interactive adve
                 }
 
                 //sync to server
-                const updatedBook = await updateBook(book.id, validatedBook)
+                await updateBook(book.id, validatedBook)
                 console.log(`$sent update to server`)
             }, 5000)
 
@@ -530,7 +517,7 @@ The premise should feel like the opening description of an epic interactive adve
                                             })
 
                                             //sync to server
-                                            syncBookToServerKeysSet(["storyPremise"])
+                                            syncBookToServerKeysSet(["name", "storyPremise"])
                                         }}
                                     />
                                 )}
@@ -968,9 +955,9 @@ The premise should feel like the opening description of an epic interactive adve
                                             <ShowMore
                                                 label="show more"
                                                 content={(
-                                                    <div>
+                                                    <div className="simpleGrid" style={{ gap: "var(--spacingR)" }}>
                                                         <div>
-                                                            <p>age</p>
+                                                            <label>Age</label>
                                                             <p>{eachCharacter.age}</p>
                                                         </div>
 
@@ -993,7 +980,7 @@ The premise should feel like the opening description of an epic interactive adve
                                                         />
 
                                                         <div>
-                                                            <p>status</p>
+                                                            <label>status</label>
                                                             <p>{eachCharacter.status}</p>
                                                         </div>
 
@@ -1062,7 +1049,7 @@ The premise should feel like the opening description of an epic interactive adve
                 <ShowMore
                     label='Goals'
                     content={(
-                        <div className='simpleGrid'>
+                        <div className='simpleGrid' style={{ gap: "var(--spacingR)" }}>
                             <div className='simpleFlex'>
                                 <button className='button2'
                                     onClick={async () => {
@@ -1178,16 +1165,20 @@ The premise should feel like the opening description of an epic interactive adve
                                                                 <>
                                                                     <p>{eachSubGoal.subGoalTypeObj.text}</p>
 
-                                                                    {currentArea !== undefined ? (
+                                                                    {eachSubGoal.subGoalTypeObj.areaId !== null && (
                                                                         <>
-                                                                            <p>Area:</p>
-                                                                            <p>{
-                                                                                currentArea.name
-                                                                            }</p>
-                                                                        </>
-                                                                    ) : (
-                                                                        <>
-                                                                            <p>not seeing area</p>
+                                                                            {currentArea !== undefined ? (
+                                                                                <>
+                                                                                    <p>Area:</p>
+                                                                                    <p>{
+                                                                                        currentArea.name
+                                                                                    }</p>
+                                                                                </>
+                                                                            ) : (
+                                                                                <>
+                                                                                    <p>not seeing area</p>
+                                                                                </>
+                                                                            )}
                                                                         </>
                                                                     )}
                                                                 </>
@@ -1264,6 +1255,9 @@ The premise should feel like the opening description of an epic interactive adve
             {!book.readyToRead ? (
                 <div>
                     <p>Book not ready to read</p>
+                    <button
+                        onClick={() => { showingSetupMenuSet(true) }}
+                    >open settings</button>
                 </div>
             ) : (
                 <div style={{ display: "grid", gridTemplateRows: "auto 1fr", overflow: "auto" }}>
@@ -1274,7 +1268,7 @@ The premise should feel like the opening description of an epic interactive adve
                                 // toast.success("fixed")
                                 // return
 
-                                showingSetupMenuSet(prev => !prev)
+                                showingSetupMenuSet(true)
                             }}
                         >
                             <svg className="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><path d="M64 160C64 142.3 78.3 128 96 128L480 128C497.7 128 512 142.3 512 160C512 177.7 497.7 192 480 192L96 192C78.3 192 64 177.7 64 160zM128 320C128 302.3 142.3 288 160 288L544 288C561.7 288 576 302.3 576 320C576 337.7 561.7 352 544 352L160 352C142.3 352 128 337.7 128 320zM512 480C512 497.7 497.7 512 480 512L96 512C78.3 512 64 497.7 64 480C64 462.3 78.3 448 96 448L480 448C497.7 448 512 462.3 512 480z" /></svg>
@@ -1293,7 +1287,7 @@ The premise should feel like the opening description of an epic interactive adve
 
                     <div className={styles.readingAreaContainer} style={{ gridTemplateColumns: showingSideMenu ? "1fr 300px" : "1fr" }}>
                         <div className={styles.readingArea}>
-                            <ViewChapters book={book} bookSet={bookSet} chapters={chapters} chaptersSet={chaptersSet} syncBookToServerKeysSet={syncBookToServerKeysSet} />
+                            <ViewChapters user={user} book={book} bookSet={bookSet} syncBookToServerKeysSet={syncBookToServerKeysSet} interactedLanguageLessons={sortedLanguageLessons} languageLessons={languageLessons} />
                         </div>
 
                         <div className={styles.sideMenu} style={{ display: showingSideMenu ? "" : "none" }}>

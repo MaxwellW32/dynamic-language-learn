@@ -18,7 +18,7 @@ export async function addBook(newBookObj: newBookType) {
     return addedBook
 }
 
-export async function updateBook(bookId: bookType["id"], updatedBookObj: Partial<bookType>): Promise<bookType> {
+export async function updateBook(bookId: bookType["id"], updatedBookObj: Partial<bookType>) {
     //validation
     const validatedUpdatedBook = bookSchema.partial().parse(updatedBookObj)
 
@@ -26,13 +26,11 @@ export async function updateBook(bookId: bookType["id"], updatedBookObj: Partial
     //userId
 
     //update
-    const [updatedBook] = await db.update(books)
+    await db.update(books)
         .set({
             ...validatedUpdatedBook
         })
-        .where(eq(books.id, bookId)).returning()
-
-    return updatedBook
+        .where(eq(books.id, bookId))
 }
 
 export async function fixBook(bookId: bookType["id"],) {
