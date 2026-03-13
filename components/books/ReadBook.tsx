@@ -1,6 +1,6 @@
 "use client"
 import styles from "./style.module.css"
-import { areaType, bookSchema, bookType, characterType, dictionaryJSONType, gptApiFunctionCallOptionType, grammarJSONType, interactedLanguageLessonsType, languageLessonType, locationType, makeCharactersBodySchema, makeCharactersBodyType, makeCharactersResponseSchema, makeGoalsBodySchema, makeGoalsBodyType, makeGoalsResponseSchema, makeLocationsBodySchema, makeLocationsBodyType, makeLocationsResponseSchema, makeStoryPremiseBodySchema, makeStoryPremiseBodyType, makeStoryPremiseResponseSchema, placeType, promptInfoType, userType } from '@/types'
+import { areaType, bookSchema, bookType, characterType, dictionaryJSONType, gptApiFunctionCallOptionType, grammarJSONType, interactedLanguageLessonsType, languageLessonType, locationType, makeCharactersBodySchema, makeCharactersBodyType, makeCharactersResponseSchema, makeGoalsBodySchema, makeGoalsBodyType, makeGoalsResponseSchema, makeLocationsBodySchema, makeLocationsBodyType, makeLocationsResponseSchema, makeStoryPremiseBodySchema, makeStoryPremiseBodyType, makeStoryPremiseResponseSchema, placeType, promptInfoType, userSchema, userType } from '@/types'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import ShowMore from '../showMore/ShowMore'
 import EditPromptInfo from '../promptInfo/EditPromptInfo'
@@ -15,6 +15,7 @@ import ViewLocations from "./ViewLocations"
 import ViewGoalsSubGoals from "./ViewGoalsSubGoals"
 import { defaultText } from "@/lib/defaultData"
 import { getAreaFromId, getCharacterFromId, makeNativeTargetKey } from "@/utility/contextHelpers"
+import { updateUser } from "@/serverFunctions/handleUsers"
 
 export default function ReadBook({ seenUser, seenBook }: { seenUser: userType, seenBook: bookType }) {
     const { rateLimit: makeLocationPlacesRateLimit } = UseRateLimit({})
@@ -103,8 +104,6 @@ export default function ReadBook({ seenUser, seenBook }: { seenUser: userType, s
     const [showingSetupMenu, showingSetupMenuSet] = useState(!book.readyToRead)
     const [showingSideMenu, showingSideMenuSet] = useState(false)
 
-    // const [chapters, chaptersSet] = useState<chapterType[] | undefined>(undefined)
-
     const [createStoryPremisePromptInfo, createStoryPremisePromptInfoSet] = useState<promptInfoType>({
         prompt: `Generate a compelling adventure story premise for an interactive quest-based storybook game.`,
         baseInstructions: `You are a professional adventure novelist and narrative designer creating story premises for an interactive, player-driven storybook game.
@@ -144,6 +143,8 @@ The premise should feel like the opening description of an epic interactive adve
         result: undefined
     })
 
+    const syncUserToServerDebounce = useRef<{ [key: string]: NodeJS.Timeout | undefined }>({})
+    const [syncUserToServerKeys, syncUserToServerKeysSet] = useState<(keyof userType)[] | undefined>(undefined)
     const syncBookToServerDebounce = useRef<{ [key: string]: NodeJS.Timeout | undefined }>({})
     const [syncBookToServerKeys, syncBookToServerKeysSet] = useState<(keyof bookType)[] | undefined>(undefined)
 
@@ -169,6 +170,41 @@ The premise should feel like the opening description of an epic interactive adve
         console.log(`$ran here - user`)
 
     }, [seenUser])
+
+    //sync user to server
+    useEffect(() => {
+        try {
+            if (syncUserToServerKeys === undefined) return
+
+            const combinedKeyString = syncUserToServerKeys.length === 0 ? "general" : syncUserToServerKeys.join("-")
+
+            if (syncUserToServerDebounce.current[combinedKeyString]) clearTimeout(syncUserToServerDebounce.current[combinedKeyString])
+            syncUserToServerDebounce.current[combinedKeyString] = setTimeout(async () => {
+                let validatedUser: Partial<userType>
+
+                if (syncUserToServerKeys.length === 0) {
+                    validatedUser = userSchema.parse(user)
+
+                } else {
+                    const pickShape = Object.fromEntries(
+                        syncUserToServerKeys.map((key) => [key, true])
+                    ) as Record<keyof userType, true>
+
+                    //@ts-expect-error type
+                    const reducedSchema = userSchema.pick(pickShape)
+                    validatedUser = reducedSchema.parse(user)
+                }
+
+                //sync to server
+                await updateUser(user.id, validatedUser)
+                console.log(`$sent user update to server`)
+            }, 5000)
+
+        } catch (error) {
+            consoleAndToastError(error)
+        }
+
+    }, [syncUserToServerKeys])
 
     //sync book to server
     useEffect(() => {
@@ -196,7 +232,7 @@ The premise should feel like the opening description of an epic interactive adve
 
                 //sync to server
                 await updateBook(book.id, validatedBook)
-                console.log(`$sent update to server`)
+                console.log(`$sent book update to server`)
             }, 5000)
 
         } catch (error) {
@@ -1287,7 +1323,7 @@ The premise should feel like the opening description of an epic interactive adve
 
                     <div className={styles.readingAreaContainer} style={{ gridTemplateColumns: showingSideMenu ? "1fr 300px" : "1fr" }}>
                         <div className={styles.readingArea}>
-                            <ViewChapters user={user} book={book} bookSet={bookSet} syncBookToServerKeysSet={syncBookToServerKeysSet} interactedLanguageLessons={sortedLanguageLessons} languageLessons={languageLessons} />
+                            <ViewChapters user={user} userSet={userSet} book={book} bookSet={bookSet} syncUserToServerKeysSet={syncUserToServerKeysSet} syncBookToServerKeysSet={syncBookToServerKeysSet} interactedLanguageLessons={sortedLanguageLessons} languageLessons={languageLessons} />
                         </div>
 
                         <div className={styles.sideMenu} style={{ display: showingSideMenu ? "" : "none" }}>

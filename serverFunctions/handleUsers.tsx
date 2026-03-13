@@ -3,8 +3,7 @@ import { db } from "@/db"
 import { users } from "@/db/schema"
 import { userSchema, userType, newUserSchema, newUserType, tableFilterTypes } from "@/types"
 import { makeWhereClauses } from "@/utility/utility"
-import { and, desc, eq, SQLWrapper } from "drizzle-orm"
-import { v4 } from "uuid"
+import { and, eq, SQLWrapper } from "drizzle-orm"
 
 export async function addUser(newUserObj: newUserType) {
     //validation

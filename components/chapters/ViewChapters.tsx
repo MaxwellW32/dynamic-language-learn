@@ -1,6 +1,6 @@
 "use client"
 import { addChapter, getChapters, getSpecificChapter, makeChapterSections, updateChapter } from '@/serverFunctions/handleChapters'
-import { bookType, chapterSchema, chapterType, characterType, goalType, interactedLanguageLessonsType, languageLessonType, locationType, newChapterType, sectionType, userType } from '@/types'
+import { bookType, changeMasteryPropsType, chapterSchema, chapterType, characterType, dictionaryJSONType, goalType, interactedLanguageLessonsType, languageLessonType, locationType, newChapterType, sectionType, userType } from '@/types'
 import { consoleAndToastError } from '@/utility/consoleErrorWithToast'
 import React, { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
@@ -14,7 +14,7 @@ import DisplayTranslatableTexts from './DisplayTranslatableTexts'
 
 type makeNewChapterPropsType = { chapterStarter: Partial<chapterType>, sections: sectionType[], notify: boolean }
 
-export default function ViewChapters({ user, book, bookSet, syncBookToServerKeysSet, interactedLanguageLessons, languageLessons }: { user: userType, book: bookType, bookSet: React.Dispatch<React.SetStateAction<bookType>>, syncBookToServerKeysSet: React.Dispatch<React.SetStateAction<(keyof bookType)[] | undefined>>, interactedLanguageLessons: interactedLanguageLessonsType, languageLessons: { [key: string]: languageLessonType } }) {
+export default function ViewChapters({ user, userSet, book, bookSet, syncUserToServerKeysSet, syncBookToServerKeysSet, interactedLanguageLessons, languageLessons }: { user: userType, userSet: React.Dispatch<React.SetStateAction<userType>>, book: bookType, bookSet: React.Dispatch<React.SetStateAction<bookType>>, syncUserToServerKeysSet: React.Dispatch<React.SetStateAction<(keyof userType)[] | undefined>>, syncBookToServerKeysSet: React.Dispatch<React.SetStateAction<(keyof bookType)[] | undefined>>, interactedLanguageLessons: interactedLanguageLessonsType, languageLessons: { [key: string]: languageLessonType } }) {
     const [chapters, chaptersSet] = useState<chapterType[] | undefined>(undefined)
 
     //get chapters
@@ -88,7 +88,7 @@ export default function ViewChapters({ user, book, bookSet, syncBookToServerKeys
                 <>
                     {chapters.map(eachChapter => {
                         return (
-                            <ViewChapter key={eachChapter.id} user={user} eachChapter={eachChapter} chapters={chapters} book={book} bookSet={bookSet} syncBookToServerKeysSet={syncBookToServerKeysSet} interactedLanguageLessons={interactedLanguageLessons} languageLessons={languageLessons}
+                            <ViewChapter key={eachChapter.id} user={user} userSet={userSet} eachChapter={eachChapter} chapters={chapters} book={book} bookSet={bookSet} syncUserToServerKeysSet={syncUserToServerKeysSet} syncBookToServerKeysSet={syncBookToServerKeysSet} interactedLanguageLessons={interactedLanguageLessons} languageLessons={languageLessons}
                                 chapterUpdater={(updatedChapter) => {
                                     //local change
                                     chaptersSet(prevChapters => {
@@ -127,7 +127,7 @@ export default function ViewChapters({ user, book, bookSet, syncBookToServerKeys
     )
 }
 
-function ViewChapter({ user, eachChapter, chapters, chapterUpdater, book, bookSet, syncBookToServerKeysSet, makeNewChapter, interactedLanguageLessons, languageLessons }: { user: userType, eachChapter: chapterType, chapters: chapterType[], chapterUpdater: (chapter: chapterType) => void, book: bookType, bookSet: React.Dispatch<React.SetStateAction<bookType>>, syncBookToServerKeysSet: React.Dispatch<React.SetStateAction<(keyof bookType)[] | undefined>>, makeNewChapter(makeNewChapterProps: makeNewChapterPropsType): Promise<void>, interactedLanguageLessons: interactedLanguageLessonsType, languageLessons: { [key: string]: languageLessonType } }) {
+function ViewChapter({ user, userSet, eachChapter, chapters, chapterUpdater, book, bookSet, syncUserToServerKeysSet, syncBookToServerKeysSet, makeNewChapter, interactedLanguageLessons, languageLessons }: { user: userType, userSet: React.Dispatch<React.SetStateAction<userType>>, eachChapter: chapterType, chapters: chapterType[], chapterUpdater: (chapter: chapterType) => void, book: bookType, bookSet: React.Dispatch<React.SetStateAction<bookType>>, syncUserToServerKeysSet: React.Dispatch<React.SetStateAction<(keyof userType)[] | undefined>>, syncBookToServerKeysSet: React.Dispatch<React.SetStateAction<(keyof bookType)[] | undefined>>, makeNewChapter(makeNewChapterProps: makeNewChapterPropsType): Promise<void>, interactedLanguageLessons: interactedLanguageLessonsType, languageLessons: { [key: string]: languageLessonType } }) {
     const [syncChapterToServerKeys, syncChapterToServerKeysSet] = useState<(keyof chapterType)[] | undefined>(undefined)
     const syncChapterToServerDebounce = useRef<{ [key: string]: NodeJS.Timeout | undefined }>({})
 
@@ -414,6 +414,115 @@ function ViewChapter({ user, eachChapter, chapters, chapterUpdater, book, bookSe
         }
     }
 
+    function changeMastery(changeMasteryProps: changeMasteryPropsType) {
+        function ensureInRange(seenNum: number, min = 1, max = 10) {
+            let localNum = seenNum
+
+            if (seenNum > max) {
+                localNum = max
+
+            } else if (seenNum < min) {
+                localNum = min
+            }
+
+            return localNum
+        }
+
+        //update local - mastery
+        userSet(prevUser => {
+            const newUser = { ...prevUser }
+
+            //react
+            newUser.lessonProgress = { ...newUser.lessonProgress }
+
+            //lessonProgress at spectific language pair
+            if (newUser.lessonProgress[changeMasteryProps.nativeTargetKey] === undefined) {
+                //start off
+                newUser.lessonProgress[changeMasteryProps.nativeTargetKey] = {
+                    dictionary: {
+
+                    },
+                    grammar: {
+
+                    }
+                }
+            }
+
+            //react
+            newUser.lessonProgress[changeMasteryProps.nativeTargetKey] = { ...newUser.lessonProgress[changeMasteryProps.nativeTargetKey] }
+
+            if (changeMasteryProps.option === "dictionary") {
+                let isAbsent = false
+
+                //react
+                newUser.lessonProgress[changeMasteryProps.nativeTargetKey].dictionary = { ...newUser.lessonProgress[changeMasteryProps.nativeTargetKey].dictionary }
+
+                //doesnt exist
+                if (newUser.lessonProgress[changeMasteryProps.nativeTargetKey].dictionary[changeMasteryProps.updateId] === undefined) {
+                    isAbsent = true
+
+                    //start off
+                    newUser.lessonProgress[changeMasteryProps.nativeTargetKey].dictionary[changeMasteryProps.updateId] = {
+                        mastery: 0
+                    }
+                }
+
+                //react
+                newUser.lessonProgress[changeMasteryProps.nativeTargetKey].dictionary[changeMasteryProps.updateId] = { ...newUser.lessonProgress[changeMasteryProps.nativeTargetKey].dictionary[changeMasteryProps.updateId] }
+
+                if (changeMasteryProps.onlyIfAbsent) {
+                    if (isAbsent) {
+                        //update only once
+                        newUser.lessonProgress[changeMasteryProps.nativeTargetKey].dictionary[changeMasteryProps.updateId].mastery = 1
+                    }
+
+                    return newUser
+                }
+
+                //update
+                const newNum = newUser.lessonProgress[changeMasteryProps.nativeTargetKey].dictionary[changeMasteryProps.updateId].mastery + changeMasteryProps.increment
+                newUser.lessonProgress[changeMasteryProps.nativeTargetKey].dictionary[changeMasteryProps.updateId].mastery = ensureInRange(newNum)
+
+            } else if (changeMasteryProps.option === "grammar") {
+                let isAbsent = false
+
+                //react
+                newUser.lessonProgress[changeMasteryProps.nativeTargetKey].grammar = { ...newUser.lessonProgress[changeMasteryProps.nativeTargetKey].grammar }
+
+                //doesnt exist
+                if (newUser.lessonProgress[changeMasteryProps.nativeTargetKey].grammar[changeMasteryProps.updateId] === undefined) {
+                    isAbsent = true
+
+                    //start off
+                    newUser.lessonProgress[changeMasteryProps.nativeTargetKey].grammar[changeMasteryProps.updateId] = {
+                        mastery: 0
+                    }
+                }
+
+                //react
+                newUser.lessonProgress[changeMasteryProps.nativeTargetKey].grammar[changeMasteryProps.updateId] = { ...newUser.lessonProgress[changeMasteryProps.nativeTargetKey].grammar[changeMasteryProps.updateId] }
+
+                if (changeMasteryProps.onlyIfAbsent) {
+                    if (isAbsent) {
+                        //update only once
+                        newUser.lessonProgress[changeMasteryProps.nativeTargetKey].grammar[changeMasteryProps.updateId].mastery = 1
+                    }
+
+                    return newUser
+                }
+
+                //update
+                const newNum = newUser.lessonProgress[changeMasteryProps.nativeTargetKey].grammar[changeMasteryProps.updateId].mastery + changeMasteryProps.increment
+                newUser.lessonProgress[changeMasteryProps.nativeTargetKey].grammar[changeMasteryProps.updateId].mastery = ensureInRange(newNum)
+            }
+
+            return newUser
+        })
+
+        //send to server
+        syncUserToServerKeysSet(["lessonProgress"])
+    }
+
     return (
         <div style={{ display: "grid", gap: "var(--spacingR)", maxWidth: "65ch" }}>
             {eachChapter.name !== defaultText && (
@@ -425,7 +534,7 @@ function ViewChapter({ user, eachChapter, chapters, chapterUpdater, book, bookSe
                     <div key={eachSection.id} className='simpleContainer'>
                         {eachSection.sectionObj.type === "exposition" && (
                             <>
-                                <DisplayTranslatableTexts user={user} translatableTexts={eachSection.sectionObj.textArr} languageLessons={languageLessons} />
+                                <DisplayTranslatableTexts user={user} translatableTexts={eachSection.sectionObj.textArr} languageLessons={languageLessons} changeMastery={changeMastery} />
 
                                 {eachSection.sectionObj.visual !== null && (
                                     <ShowMore

@@ -52,6 +52,14 @@ export type interactedLanguageLessonsType = {
     }
 }
 
+export type changeMasteryPropsType = {
+    nativeTargetKey: string,
+    option: "grammar" | "dictionary"
+    updateId: string, //word/grammar id 
+    increment: number,
+    onlyIfAbsent?: boolean, //only updates value if not there
+}
+
 
 
 
@@ -478,8 +486,11 @@ export type userType = z.infer<typeof userSchema> & {
     books?: bookType[],
 }
 
-export const newUserSchema = userSchema.omit({ id: true })
+export const newUserSchema = userSchema.omit({ id: true, languageSettings: true, lessonProgress: true })
 export type newUserType = z.infer<typeof newUserSchema>
+
+export const updateUserSchema = userSchema.omit({ id: true })
+export type updateUserType = z.infer<typeof updateUserSchema>
 
 
 

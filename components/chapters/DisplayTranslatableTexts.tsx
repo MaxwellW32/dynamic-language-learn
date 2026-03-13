@@ -1,16 +1,19 @@
 "use client"
-import { dictionaryJSONType, languageLessonType, translatableTextType, userType } from '@/types'
+import { changeMasteryPropsType, dictionaryJSONType, languageLessonType, translatableTextType, userType } from '@/types'
 import { makeNativeTargetKey } from '@/utility/contextHelpers'
 import React, { useEffect, useRef, useState } from 'react'
 
-export default function DisplayTranslatableTexts({ user, translatableTexts, languageLessons }: { user: userType, translatableTexts: translatableTextType[], languageLessons: { [key: string]: languageLessonType } }) {
+export default function DisplayTranslatableTexts({ user, translatableTexts, languageLessons, changeMastery }: {
+  user: userType, translatableTexts: translatableTextType[], languageLessons: { [key: string]: languageLessonType }, changeMastery(changeMasteryProps: changeMasteryPropsType): void
+}) {
   return (
     <div className='simpleFlex'>
       {translatableTexts.map((eachTranslatableText, eachTranslatableTextIndex) => {
         let foundWord: undefined | dictionaryJSONType["key"] = undefined
+        let combinedKey: string | null = null
 
         if (typeof eachTranslatableText === "object") {
-          const combinedKey = makeNativeTargetKey(user.languageSettings.native, { name: eachTranslatableText.languageName, dialect: eachTranslatableText.languageDialect === null ? undefined : eachTranslatableText.languageDialect })
+          combinedKey = makeNativeTargetKey(user.languageSettings.native, { name: eachTranslatableText.languageName, dialect: eachTranslatableText.languageDialect === null ? undefined : eachTranslatableText.languageDialect })
 
           if (languageLessons[combinedKey] !== undefined) {
             foundWord = languageLessons[combinedKey].dictionary[eachTranslatableText.id]
@@ -23,7 +26,7 @@ export default function DisplayTranslatableTexts({ user, translatableTexts, lang
             {typeof eachTranslatableText === "object" ? (
               <>
                 {foundWord !== undefined ? (
-                  <WordReveal word={foundWord} />
+                  <WordReveal word={foundWord} wordId={eachTranslatableText.id} combinedKey={combinedKey!} changeMastery={changeMastery} />
                 ) : (
                   <p>not seeing word</p>
                 )}
@@ -38,7 +41,7 @@ export default function DisplayTranslatableTexts({ user, translatableTexts, lang
   )
 }
 
-function WordReveal({ word }: { word: dictionaryJSONType["KEY"] }) {
+function WordReveal({ word, wordId, combinedKey, changeMastery }: { word: dictionaryJSONType["KEY"], wordId: string, combinedKey: string, changeMastery(changeMasteryProps: changeMasteryPropsType): void }) {
   const [open, setOpen] = useState(false)
   const [style, setStyle] = useState<React.CSSProperties>({})
   const triggerRef = useRef<HTMLSpanElement>(null)
@@ -100,7 +103,13 @@ function WordReveal({ word }: { word: dictionaryJSONType["KEY"] }) {
 
           //check if mastered - assign seen
           //get user obj = see if there, if not add with mastery 1
-
+          changeMastery({
+            nativeTargetKey: combinedKey,
+            option: "dictionary",
+            updateId: wordId,
+            increment: 1,
+            onlyIfAbsent: true,
+          })
         }}
         style={{
           cursor: "pointer",

@@ -1,9 +1,13 @@
 //To Do
 //
+//ai to grade interactive subGoals, system to grade gamemodes
+//ai to create subGoals
+//make gamemodes - find meaning
+//add chapter nav - active chapter id, with controls
+//hide main nev
 //add chat button
 //make ai return language words
-//fill out gameModes
-//fix - entries in types repalce with camelCase
+//fix - entries in types replace with camelCase
 //make grammar sometimes spawn
 //make gpt able to send its own translations
 //add mastery level
