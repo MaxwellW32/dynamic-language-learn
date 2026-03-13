@@ -1,4 +1,49 @@
 //To Do
+//
+//book makes 100 goals
+//eachsub goal is what's used to generate
+//exposition - themes, info, character dialogue - ai has context to make it match
+//interact - ai sets context - sets up understanding that character is to be talked to - interact screen shown in section
+//defeat charcter - ai sets context - gamemodes shown -
+//
+//
+//
+//changes:
+//ensure prompts working for each section
+//make small demo - 5 goals - sub goals
+//section ai doesn't change subGoals
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 //ensure sections working
 //improve prompts
 //make recursive goal system
@@ -19,7 +64,7 @@
 //ensure checks language present
 //add not ready yet for certain language selections
 //
-//
+//add error check for book
 //
 //
 //

@@ -147,7 +147,7 @@ export const characterSchema = z.object({
     type: z.enum(["player", "npc", "mob", "boss"]),
     personality: z.string().min(1),
     visualDescription: z.string().min(1),
-    location: z.union([
+    locationObj: z.union([
         z.object({
             type: z.literal("withPlayer")
         }),
@@ -167,6 +167,11 @@ export type characterType = z.infer<typeof characterSchema>
 
 
 
+//warm village welcome, peril in argentina, save the blacksmith, new sword, castle plunging
+//sub Goals: where are we, interactive goal to win a kiss from inn keeper, 
+//ai links con
+//
+//
 //goals
 export const goalSchema = z.object({
     id: z.string().min(1),
@@ -180,7 +185,7 @@ export const goalSchema = z.object({
                 //exposition ai writes around - takes place at an areadId - ai determines if complete
                 type: z.literal("exposition"),
                 text: z.string().min(1),
-                areaId: areaSchema.shape.id
+                areaId: areaSchema.shape.id.nullable()
             }),
             z.object({
                 //convince blacksmith, recruit npc - spawns chatroom
@@ -276,40 +281,34 @@ export type makeStoryPremiseResponseType = z.infer<typeof makeStoryPremiseRespon
 
 
 //make locations
-const locationOptions = ["locations", "places", "areas", "areaConnections"] as const
+const locationOptions = ["locations", "places", "areas"] as const
 
 export const makeLocationsBodySchema = z.object({
     option: z.enum(locationOptions),
     storyPremise: z.string().min(1),
-    location: locationSchema.optional(),
-    place: placeSchema.optional(),
-    allLocations: locationSchema.array().optional(),
-    givenAreas: z.object({
-        areas: areaSchema.array(),
-        suggestedAreaConnections: areaConnectionSchema.array()
-    }).optional(),
+    location: locationSchema.optional(),//for places
+    place: placeSchema.optional(),//for areas
 })
 export type makeLocationsBodyType = z.infer<typeof makeLocationsBodySchema>
 
 export const locationResponseSchema = z.object({
     type: z.literal("locations"),
-    locations: locationSchema.array(),
+    locations: locationSchema.extend({//return location with no places
+        places: placeSchema.array().length(0)
+    }).array(),
 })
 export const placeResponseSchema = z.object({
     type: z.literal("places"),
-    places: placeSchema.array(),
+    places: placeSchema.extend({//return place with no areas
+        areas: areaSchema.array().length(0)
+    }).array(),
 })
 export const areaResponseSchema = z.object({
     type: z.literal("areas"),
     areas: areaSchema.array(),
 })
-export const areaConnectionResponseSchema = z.object({
-    type: z.literal("areaConnections"),
-    areaConnections: areaConnectionSchema.array(),
-})
-
 export const makeLocationsResponseSchema = z.object({
-    results: z.union([locationResponseSchema, placeResponseSchema, areaResponseSchema, areaConnectionResponseSchema]),
+    results: z.union([locationResponseSchema, placeResponseSchema, areaResponseSchema]),
 })
 export type makeLocationsResponseType = z.infer<typeof makeLocationsResponseSchema>
 
@@ -318,13 +317,16 @@ export type makeLocationsResponseType = z.infer<typeof makeLocationsResponseSche
 
 //make characters
 export const makeCharactersBodySchema = z.object({
-    baseInstructions: z.string().min(1),
+    prevCharacters: characterSchema.array(),
+    locations: locationSchema.array(),
     prompt: z.string().min(1),
 })
 export type makeCharactersBodyType = z.infer<typeof makeCharactersBodySchema>
 
 export const makeCharactersResponseSchema = z.object({
-    characters: characterSchema.array()
+    characters: characterSchema.extend({//return characters with no memories
+        memories: characterSchema.shape.memories.length(0)
+    }).array()
 })
 export type makeCharactersResponseType = z.infer<typeof makeCharactersResponseSchema>
 
@@ -363,7 +365,7 @@ export const makeChapterSectionsResponseSchema = z.object({
             z.object({
                 type: z.literal("character-change"),
                 characterId: characterSchema.shape.id,
-                location: characterSchema.shape.location.nullable(),
+                location: characterSchema.shape.locationObj.nullable(),
                 status: characterSchema.shape.status.nullable(),
                 skillsAndAbilities: characterSchema.shape.skillsAndAbilities.nullable(),
                 likes: characterSchema.shape.likes.nullable(),
@@ -497,7 +499,6 @@ export const bookSchema = z.object({
     characters: characterSchema.array(),
     goals: goalSchema.array(),
     readyToRead: z.boolean(),
-    areaConnections: areaConnectionSchema.array(),
     currentChapterId: z.string(),
 
     userId: userSchema.shape.id,

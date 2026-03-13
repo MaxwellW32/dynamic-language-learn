@@ -37,7 +37,7 @@ export default function ViewChatSection({ seenSectionId, chatSection, eachChapte
 
             //get player
             const foundPlayer = ensurePlayer(book)
-            if (foundPlayer.location.type === "withPlayer") throw new Error("player location can't be 'with player'")
+            if (foundPlayer.locationObj.type === "withPlayer") throw new Error("player location can't be 'with player'")
 
 
 
@@ -47,7 +47,7 @@ export default function ViewChatSection({ seenSectionId, chatSection, eachChapte
 
 
             //filter locations/places/areas
-            const currentAreaId = foundPlayer.location.areaId
+            const currentAreaId = foundPlayer.locationObj.areaId
             const relevantLocations: locationType[] = getImportantLocations(book, currentAreaId)
             const areaIdsConnected: areaType["id"][] = getConnectedAreaIds(book, currentAreaId)
             const allRelevantAreaIds = [...areaIdsConnected, currentAreaId]

@@ -38,7 +38,6 @@ export const books = pgTable("books", {
     characters: json("characters").$type<characterType[]>().default([]).notNull(),
     goals: json("goals").$type<goalType[]>().default([]).notNull(),
     readyToRead: boolean("readyToRead").notNull().default(false),
-    areaConnections: json("areaConnections").$type<areaConnectionType[]>().default([]).notNull(),
     currentChapterId: text("currentChapterId").notNull().default(""),
 
     userId: text("userId").notNull().references(() => users.id),

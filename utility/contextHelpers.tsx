@@ -10,22 +10,22 @@ export function getImportantCharacters(book: bookType) {
     //get player
     const foundPlayer = getPlayer(book)
     if (foundPlayer === undefined) throw new Error("not seeing player")
-    if (foundPlayer.location.type === "withPlayer") throw new Error("player location can't be 'with player'")
+    if (foundPlayer.locationObj.type === "withPlayer") throw new Error("player location can't be 'with player'")
 
     //add player
     importantCharacters.push(foundPlayer)
 
     //get companions
-    const charactersWithPlayer = book.characters.filter(eachCharacter => eachCharacter.location.type === "withPlayer")
+    const charactersWithPlayer = book.characters.filter(eachCharacter => eachCharacter.locationObj.type === "withPlayer")
     //add companions
     importantCharacters.push(...charactersWithPlayer)
 
     //get characters in same area
     const otherCharactersInSameArea = book.characters.filter(eachCharacter => {
-        if (foundPlayer.location.type === "withPlayer") throw new Error("player location can't be 'with player'")
+        if (foundPlayer.locationObj.type === "withPlayer") throw new Error("player location can't be 'with player'")
 
         //match same area id - ensure not player
-        if (eachCharacter.location.type === "area" && eachCharacter.location.areaId === foundPlayer.location.areaId && eachCharacter.id !== foundPlayer.id) {
+        if (eachCharacter.locationObj.type === "area" && eachCharacter.locationObj.areaId === foundPlayer.locationObj.areaId && eachCharacter.id !== foundPlayer.id) {
             return true
         }
 
@@ -187,9 +187,9 @@ export function getPlayer(book: bookType) {
 }
 export function getPlayerArea(book: bookType, playerCharacter: characterType) {
     if (playerCharacter.type !== "player") throw new Error("not a player")
-    if (playerCharacter.location.type === "withPlayer") throw new Error("player can't be with player")
+    if (playerCharacter.locationObj.type === "withPlayer") throw new Error("player can't be with player")
 
-    const seenPlayerAreaId = playerCharacter.location.areaId
+    const seenPlayerAreaId = playerCharacter.locationObj.areaId
 
     let foundArea: areaType | undefined = undefined
 
@@ -226,4 +226,15 @@ export function getAreaFromId(book: bookType, areaId: areaType["id"]): areaType 
     })
 
     return foundArea
+}
+export function getCharacterFromId(book: bookType, characterId: characterType["id"]): characterType | undefined {
+    let foundCharacter: characterType | undefined = undefined
+
+    book.characters.map(eachCharacter => {
+        if (eachCharacter.id === characterId) {
+            foundCharacter = eachCharacter
+        }
+    })
+
+    return foundCharacter
 }

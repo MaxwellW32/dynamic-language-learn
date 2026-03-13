@@ -192,7 +192,7 @@ function ViewChapter({ eachChapter, chapters, chapterUpdater, book, bookSet, syn
 
             //get player
             const foundPlayer = ensurePlayer(book)
-            if (foundPlayer.location.type === "withPlayer") throw new Error("player location can't be 'with player'")
+            if (foundPlayer.locationObj.type === "withPlayer") throw new Error("player location can't be 'with player'")
 
 
 
@@ -200,7 +200,7 @@ function ViewChapter({ eachChapter, chapters, chapterUpdater, book, bookSet, syn
             //important locations
             //get current area
             //get areas connected to it
-            const currentAreaId = foundPlayer.location.areaId
+            const currentAreaId = foundPlayer.locationObj.areaId
             const relevantLocations: locationType[] = getImportantLocations(book, currentAreaId)
             const areaIdsConnected: areaType["id"][] = getConnectedAreaIds(book, currentAreaId)
             const allRelevantAreaIds = [...areaIdsConnected, currentAreaId]
@@ -279,7 +279,7 @@ function ViewChapter({ eachChapter, chapters, chapterUpdater, book, bookSet, syn
 
                                     //add updates to character obj
                                     if (updates.location !== null) {
-                                        eachCharacter.location = updates.location
+                                        eachCharacter.locationObj = updates.location
                                     }
                                     if (updates.status !== null) {
                                         eachCharacter.status = updates.status
@@ -316,12 +316,12 @@ function ViewChapter({ eachChapter, chapters, chapterUpdater, book, bookSet, syn
                                     //react
                                     eachCharacter = { ...eachCharacter }
 
-                                    if (playerChangeObj.type === "location" && eachCharacter.location.type === "area") {
+                                    if (playerChangeObj.type === "location" && eachCharacter.locationObj.type === "area") {
                                         if (playerChangeObj.locationChangeObj.type === "success") {
                                             //react
-                                            eachCharacter.location = { ...eachCharacter.location }
+                                            eachCharacter.locationObj = { ...eachCharacter.locationObj }
 
-                                            eachCharacter.location.areaId = playerChangeObj.locationChangeObj.newAreaId
+                                            eachCharacter.locationObj.areaId = playerChangeObj.locationChangeObj.newAreaId
 
                                         } else if (playerChangeObj.locationChangeObj.type === "failed") {
                                             toast.error("can't change location")

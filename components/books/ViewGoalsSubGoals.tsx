@@ -39,8 +39,8 @@ export default function ViewGoalsSubGoals({ book }: { book: bookType }) {
         })
 
         //since found character get area
-        if (starterResults.character !== undefined && starterResults.character.location.type === "area") {
-            starterResults.inArea = findArea(book.locations, starterResults.character.location.areaId)
+        if (starterResults.character !== undefined && starterResults.character.locationObj.type === "area") {
+            starterResults.inArea = findArea(book.locations, starterResults.character.locationObj.areaId)
         }
 
         return starterResults

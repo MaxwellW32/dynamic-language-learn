@@ -1,6 +1,6 @@
 import { chosenGptModel, openai } from "@/lib/openai";
 import { NextResponse } from "next/server";
-import { areaConnectionResponseSchema, areaResponseSchema, areaType, characterType, gptApiFunctionCallOptionSchema, locationResponseSchema, locationType, makeCharactersBodySchema, makeCharactersBodyType, makeCharactersResponseSchema, makeCharactersResponseType, makeGoalsBodySchema, makeGoalsBodyType, makeGoalsResponseSchema, makeGoalsResponseType, makeLocationsBodySchema, makeLocationsBodyType, makeLocationsResponseSchema, makeLocationsResponseType, makeStoryPremiseBodySchema, makeStoryPremiseBodyType, makeStoryPremiseResponseSchema, makeStoryPremiseResponseType, placeResponseSchema, placeType } from "@/types";
+import { areaResponseSchema, areaSchema, areaType, characterSchema, characterType, gptApiFunctionCallOptionSchema, locationResponseSchema, locationSchema, locationType, makeCharactersBodySchema, makeCharactersBodyType, makeCharactersResponseSchema, makeCharactersResponseType, makeGoalsBodySchema, makeGoalsBodyType, makeGoalsResponseSchema, makeGoalsResponseType, makeLocationsBodySchema, makeLocationsBodyType, makeLocationsResponseSchema, makeLocationsResponseType, makeStoryPremiseBodySchema, makeStoryPremiseBodyType, makeStoryPremiseResponseSchema, makeStoryPremiseResponseType, placeResponseSchema, placeSchema, placeType } from "@/types";
 import { errorZodErrorAsString } from "@/utility/consoleErrorWithToast";
 import { zodTextFormat } from "openai/helpers/zod";
 import { v4 as uuidV4 } from "uuid"
@@ -56,7 +56,7 @@ async function makeStoryPremise({ prompt, baseInstructions }: makeStoryPremiseBo
     return validatedResponse
 }
 
-async function makeLocations({ storyPremise, option, location, place, allLocations, givenAreas }: makeLocationsBodyType): Promise<makeLocationsResponseType> {
+async function makeLocations({ storyPremise, option, location, place }: makeLocationsBodyType): Promise<makeLocationsResponseType> {
     if (storyPremise === defaultText) throw new Error("need storyPremise")
 
     let prompt = ``
@@ -70,6 +70,7 @@ Each location must:
 - Feel large enough to contain multiple places.
 - Be meaningfully different from the others.
 - Be spaced out sensibly on a grid using x,y - starts at 0,0 so can have negative values. Coordinates and size are in meters.
+- Do not generate any places
 - generate max 3 locations`
 
     } else if (option === "places") {
@@ -86,6 +87,7 @@ Each place must:
 - Be distinct from the others.
 - Have their coordinates located within it's given location
 - Allow multiple internal areas, sized large enough to hold them.
+- Do not generate any areas
 - Generate max 5 places`
 
     } else if (option === "areas") {
@@ -104,77 +106,8 @@ Each area must:
 - Have a clear visual identity.
 - Contain interactive potential (NPCs, items, secrets, danger, lore).
 - Feel physically believable (no impossible layouts unless fantasy-justified).
-- areas must be spaced out sensibly within it's place using it's x,y coordinates.
+- areas must be spaced out sensibly within it's place using it's x,y coordinates and size. Can also be outside the designated place (e.g outside pool)
 - generate max 5 areas`
-
-    } else if (option === "areaConnections") {
-        if (allLocations === undefined && givenAreas === undefined) throw new Error("need all locations or givenAreas")
-
-        prompt += `You are designing traversal connections for an adventure story world.
-
-WORLD STRUCTURE:
-- Each Location contains multiple Places.
-- Each Place contains multiple Areas.
-- Areas are the smallest navigable unit.
-
-Your job is to create Area-to-Area connections.
-
-${allLocations !== undefined && `All locations:
-${JSON.stringify(allLocations)}`}
-
-${givenAreas !== undefined && `Areas:
-${JSON.stringify(givenAreas)}
-
-Given these areas and suggestion please connect them in the best way possible. Filling in the travelDescription in the output.`}
-
-CORE RULES:
-1) FULL CONNECTIVITY (CRITICAL)
-All areas across ALL locations must be reachable from any other area through chaining.
-There must be NO isolated areas.
-Think of this as designing a connected graph.
-
-2) WITHIN-PLACE CONNECTIONS
-Areas inside the same Place should almost always connect logically.
-Example:
-- Bedroom connects to hallway.
-- Hallway connects to kitchen.
-- Bathroom connects to hallway.
-
-Avoid unrealistic direct jumps (e.g. bedroom directly to rooftop unless justified).
-
-3) BETWEEN-PLACE CONNECTIONS (SAME LOCATION)
-Places inside the same Location should connect through sensible transitional areas.
-Example:
-- "Childhood Home - Living Room" connects to "Front Yard".
-- "Front Yard" connects to "Town Street".
-
-4) BETWEEN-LOCATION CONNECTIONS
-Some areas must connect across different Locations to ensure the world is fully traversable.
-These connections should feel intentional:
-- Roads
-- Forest paths
-- Portals
-- Boats
-- Mountains passes
-- Hidden tunnels
-- Magical gates
-
-Do NOT randomly connect unrelated interior rooms across distant locations.
-
-5) GROUND LOGIC
-Areas that are outdoors, streets, roads, courtyards, forests, docks, etc. are good candidates for cross-place and cross-location connections.
-
-6) TRAVEL DESCRIPTION
-Each connection must include a short but immersive description explaining how traversal happens.
-Examples:
-- "Walk through the wooden doorway into the hallway."
-- "Step onto the dusty road leading toward the market."
-- "Climb the narrow staircase to the attic."
-- "Follow the forest trail toward the distant village."
-
-7) NO DUPLICATES
-Do not create duplicate or mirrored connections.
-If Area A connects to Area B, do not separately create B to A.`
 
     } else {
         throw new Error("invalid option")
@@ -215,8 +148,7 @@ ${storyPremise}
         text: {
             format: option === "locations" ? zodTextFormat(locationResponseSchema, "locationResponse") :
                 option === "places" ? zodTextFormat(placeResponseSchema, "placeResponse") :
-                    option === "areas" ? zodTextFormat(areaResponseSchema, "areaResponse") :
-                        zodTextFormat(areaConnectionResponseSchema, "areaConnectorResponse")
+                    zodTextFormat(areaResponseSchema, "areaResponse")
         },
     });
 
@@ -280,10 +212,44 @@ ${storyPremise}
     return validatedResponse
 }
 
-async function makeCharacters({ prompt, baseInstructions }: makeCharactersBodyType): Promise<makeCharactersResponseType> {
+async function makeCharacters({ prompt, locations, prevCharacters }: makeCharactersBodyType): Promise<makeCharactersResponseType> {
     const response = await openai.responses.parse({
         model: chosenGptModel,
-        instructions: baseInstructions,
+        instructions: `You are generating new characters for this world.
+Locations:
+${JSON.stringify(locations)}
+
+Previously Generated Characters:
+${JSON.stringify(prevCharacters)}
+
+CORE RULES:
+1) Leave the memories array empty.
+2) Keep likes/dislikes array short - realistic for personality.
+3) Keep skillsAndAbilities array short.
+4) Generate at most 10 characters.
+
+2) PLAYER RULE
+There can only ever be ONE player character type in the entire world. That will be the user reading the book.
+Please create if it does not exist in "Previously Generated Characters", do not create another.
+
+3) PURPOSE DRIVEN
+Each character must serve a clear gameplay purpose:
+- Quest giver
+- Ally
+- Merchant
+- Informant
+- Mob enemy
+- Boss enemy
+- interesting, friendly npc
+
+4) AREA ASSIGNMENT (MANDATORY)
+Each character must:
+- Belong to a specific Area ID or be travelling with the player - locationObj-"withPlayer".
+- Make sense being in that Area.
+Example:
+- A blacksmith belongs in a forge area.
+- A bandit belongs on a road or forest edge.
+- A boss might live in a throne room, cave, tower, or dungeon.`,
         input: prompt,
         text: {
             format: zodTextFormat(makeCharactersResponseSchema, "makeCharactersResponse"),
@@ -304,106 +270,208 @@ async function makeCharacters({ prompt, baseInstructions }: makeCharactersBodyTy
 }
 
 async function makeGoals({ storyPremise, locations, characters, prevGoals }: makeGoalsBodyType): Promise<makeGoalsResponseType> {
-    type reducedAreaType = Pick<areaType, "id" | "name">
-    const reducedAreas: reducedAreaType[] = []
     //add to reduced areas
-    locations.map(eachLocation => {
-        eachLocation.places.map(eachPlace => {
-            eachPlace.areas.map(eachArea => {
-                const newReducedArea: reducedAreaType = {
-                    id: eachArea.id,
-                    name: eachArea.name
-                }
+    characters = characters.map(eachCharacter => {
+        //reduce
+        eachCharacter = characterSchema.omit({ visualDescription: true }).parse(eachCharacter) as characterType
 
-                reducedAreas.push(newReducedArea)
-            })
-        })
+        return eachCharacter
     })
 
-    type reducedCharacterType = Pick<characterType, "id" | "name" | "age" | "likes" | "dislikes" | "type" | "status" | "memories" | "skillsAndAbilities">
-    const reducedCharacters: reducedCharacterType[] = []
-    //add to reduced areas
-    characters.map(eachCharacter => {
-        const newReducedCharacter: reducedCharacterType = {
-            type: eachCharacter.type,
-            id: eachCharacter.id,
-            name: eachCharacter.name,
-            age: eachCharacter.age,
-            status: eachCharacter.status,
-            skillsAndAbilities: eachCharacter.skillsAndAbilities,
-            likes: eachCharacter.likes,
-            dislikes: eachCharacter.dislikes,
-            memories: eachCharacter.memories,
-        }
+    const instructions = `You are a narrative game designer creating structured gameplay progression for an AI-driven story game. Your job is to design major story goals and the actionable subGoals that the player must complete to progress through the story.
 
-        reducedCharacters.push(newReducedCharacter)
-    })
+Goals represent the major narrative beats of the story.
+SubGoals represent the concrete actions the player performs to achieve each goal.
 
-    const instructions = `You are a narrative game designer generating structured gameplay goals.
+The final output must feel like a well-paced novel combined with a playable RPG quest system.
+========================
+STORY STRUCTURE
+========================
 
-Your task:
-Generate a progression of high-quality, gameplay-driven goals for the story.
+Generate up to 20 major goals that map the entire story arc.
 
-Design Principles:
-- Goals must be actionable and completable.
-- Think like a quest designer, not a novelist.
-- Every goal must move the story forward in major parts - what's needed to complete the story.
-- Sub-goals should feel like clear player objectives.
-- Avoid filler or vague narrative fluff.
+Each goal must belong to one of the following narrative stages:
+- introduction
+- rising-action
+- climax
+- falling-action
+- resolution
 
-Goal Rules:
-- Maximum 10 top-level goals.
-- Goals should escalate in stakes or complexity.
-- Early goals introduce mechanics and world.
-- Mid goals deepen conflict and player agency.
-- Final goals resolve major tension.
+Pacing guidance:
 
-SubGoal Types:
-1. exposition  
-   - Used to establish direction or reveal information.
-   - Keep concise but meaningful.
-   - This is read by another AI that writes the story.
-2. area  
-   - Player must visit a specific area.
-   - Use ONLY valid areaId values from provided areas.
+Introduction:
+- Establish the world, location, and key characters.
+- Focus on discovery and small interactions.
 
-3. defeat-character  
-   - Only use characters whose type is "mob" or "boss".
-   - Use ONLY valid characterId values.
+Rising Action:
+- Expand the conflict.
+- Introduce new characters, dangers, and mysteries.
+- Stakes should increase.
 
-4. interactive  
-   - Small, focused objective involving a character.
-   - Examples: convince, recruit, extract info, bargain, threaten.
-   - Must use a valid characterId.
-   - Should feel achievable in 1–2 scenes.
+Climax:
+- The major confrontation or turning point of the story.
 
-Design Balance:
-- Mix exposition, area, interactive, and combat goals naturally.
-- Not every goal needs combat.
-- Not every goal needs exposition.
-- look at previous goals to see what is needed
-- Avoid repetition of the same structure across all goals.
-- Avoid chaining multiple exposition subgoals in a row.
+Falling Action:
+- Consequences of the climax.
+- Remaining problems being resolved.
+
+Resolution:
+- Wrap up the story.
+- Final character outcomes and world state.
+
+
+========================
+GOAL DESIGN RULES
+========================
+Each goal must:
+- Move the story forward in a meaningful way.
+- Escalate the stakes or deepen the narrative.
+- Be achievable through its subGoals.
+- Avoid filler or generic objectives.
+
+Goals should feel like major chapters of a novel.
+
+========================
+SUBGOAL STRUCTURE
+========================
+Each goal must contain roughly 15 subGoals.
+SubGoals represent the individual actions the player performs.
+They should form a logical sequence that progresses the player through the goal.
+
+
+========================
+SUBGOAL TYPES
+========================
+1. exposition
+Purpose:
+Reveal information, advance narrative, or change player location.
+
+Rules:
+- Concise narrative direction.
+- Another AI will expand this into story text.
+- Include an areaId ONLY when the story requires the player to move to a new area.
+- When an areaId is provided, the player will move to that area and subsequent subGoals should take place there unless another areaId is specified.
+
+Use this for:
+- discoveries
+- story revelations
+- moving the player through the map
+
+2. interactive
+Purpose:
+A focused interaction with a character.
+
+Examples:
+- convince
+- recruit
+- question
+- negotiate
+- threaten
+- persuade
+- investigate
+
+Rules:
+- Must reference a valid characterId
+- Should feel achievable in 1–2 scenes
+
+
+3. defeat-character
+Purpose:
+The player defeats a mob or boss.
+
+Rules:
+- Use only characters whose type is "mob" or "boss".
+- Must reference a valid characterId.
+- Each defeat spawns language-learning minigames.
+
+GameModes determine which minigames appear.
+
+Available modes:
+- meaning
+- pronunciation
+- grammar
+
+Design guidance:
+
+Mob fights:
+- 1–2 gameModes
+
+Boss fights:
+- as many gameModes as you think is warranted for the boss
+Boss fights should represent major story confrontations.
+
+========================
+DESIGN BALANCE
+========================
+SubGoals within a goal should mix:
+- exposition
+- interactive objectives
+- combat encounters
+
+========================
+WORLD TRAVERSAL
+========================
+The player exists within the world map.
+
+Locations contain places and areas.
+Rules:
+- Consider the player's current areaId when generating new exposition steps.
+- Areas have coordinates (x, y) in meters.
+- When moving the player choose appropriate areas.
+- Story movement across the map should feel natural and progressive.
+
+========================
+CHARACTER USAGE
+========================
+Use characters in meaningful ways:
+
+NPC characters:
+- used for interactive subGoals
+
+Mob characters:
+- used for combat encounters
+
+Boss characters:
+- used for major narrative confrontations
+
+========================
+REPETITION RULES
+========================
+Avoid repeating:
+- identical interaction types
+- identical narrative beats
+
+Each goal should introduce something new to the story.
+========================
+CURRENT STORY CONTEXT
+========================
 
 Story Premise:
 ${storyPremise}
 
-Areas:
-${JSON.stringify(reducedAreas)}
+Locations:
+${JSON.stringify(locations)}
 
 Characters:
-${JSON.stringify(reducedCharacters)}
+${JSON.stringify(characters)}
 
-Prev Goals:
-${JSON.stringify(prevGoals)}`
+Previously Generated Goals:
+${JSON.stringify(prevGoals)}
+
+========================
+IMPORTANT OUTPUT RULES
+========================
+- Generate ONLY goals needed to continue the story progression.
+- Do not repeat previously generated goals.
+- Ensure goals logically follow previous ones.
+- Only use valid characterId and areaId values.`
 
     console.log(`$instructions`, instructions);
 
     const response = await openai.responses.parse({
         model: chosenGptModel,
         instructions: instructions,
-        input: `Generate structured gameplay goals for this story.
-Follow all system instructions strictly.`,
+        input: `Generate structured gameplay goals for this story.`,
         text: {
             format: zodTextFormat(makeGoalsResponseSchema, "makeGoalsResponse"),
         },
@@ -411,6 +479,21 @@ Follow all system instructions strictly.`,
 
     //validate
     const validatedResponse = makeGoalsResponseSchema.parse(response.output_parsed)
+
+    //assign ids to each goal and subGoal
+    validatedResponse.goals = validatedResponse.goals.map(eachGoal => {
+        //assign id
+        eachGoal.id = uuidV4()
+
+        eachGoal.subGoals = eachGoal.subGoals.map(eachSubGoal => {
+            //assign id
+            eachSubGoal.id = uuidV4()
+
+            return eachSubGoal
+        })
+
+        return eachGoal
+    })
 
     return validatedResponse
 }

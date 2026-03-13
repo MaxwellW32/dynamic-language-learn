@@ -14,7 +14,7 @@ import ViewChapters from "../chapters/ViewChapters"
 import ViewLocations from "./ViewLocations"
 import ViewGoalsSubGoals from "./ViewGoalsSubGoals"
 import { defaultText } from "@/lib/defaultData"
-import { makeNativeTargetKey } from "@/utility/contextHelpers"
+import { getAreaFromId, getCharacterFromId, makeNativeTargetKey } from "@/utility/contextHelpers"
 
 export default function ReadBook({ seenUser, seenBook }: { seenUser: userType, seenBook: bookType }) {
     const { rateLimit: makeLocationPlacesRateLimit } = UseRateLimit({})
@@ -112,7 +112,6 @@ export default function ReadBook({ seenUser, seenBook }: { seenUser: userType, s
         return newInteractedLanguageLessons
     }, [user.lessonProgress, languageLessons])
 
-    const [neededSimulatedConnections, neededSimulatedConnectionsSet] = useState<areaConnectionType[]>([])
     const [showingSetupMenu, showingSetupMenuSet] = useState(!book.readyToRead)
     const [showingSideMenu, showingSideMenuSet] = useState(false)
 
@@ -143,7 +142,6 @@ Constraints:
 - Do NOT write dialogue.
 - Do NOT format with bullet points.
 - Do NOT include section labels.
-- Target length: 150–220 words.
 - Do not exceed 400 words.
 - Do not name any characters.
 
@@ -153,62 +151,13 @@ The premise should feel like the opening description of an epic interactive adve
     })
     const [createCharactersPromptInfo, createCharactersPromptInfoSet] = useState<promptInfoType>({
         prompt: `Make compelling characters`,
-        baseInstructions: `You are generating new characters for this world.
-Locations:
-[[locations]]
-
-Previously Generated Characters:
-[[characters]]
-
-CORE RULES:
-1) Generate a player character if not there already - an MC the user of the story can play as
-2) Leave the memories array empty.
-3) Keep likes/dislikes array short - realistic for personality.
-4) Keep skillsAndAbilities array short.
-5) Generate at most 3 characters.
-
-2) PLAYER RULE
-There can only ever be ONE player character type in the entire world. That will be the user reading the book.
-Please create if it does not exist in "Previously Generated Characters", do not create another.
-
-3) PURPOSE DRIVEN
-Each character must serve a clear gameplay purpose:
-- Quest giver
-- Ally
-- Merchant
-- Informant
-- Mob enemy
-- Boss enemy
-- interesting, friendly npc
-
-4) AREA ASSIGNMENT (MANDATORY)
-Each character must:
-- Belong to a specific Area ID.
-- Make sense being in that Area.
-Example:
-- A blacksmith belongs in a forge area.
-- A bandit belongs on a road or forest edge.
-- A boss might live in a throne room, cave, tower, or dungeon.`,
+        baseInstructions: ``,
         loading: false,
         result: undefined
     })
 
     const syncBookToServerDebounce = useRef<{ [key: string]: NodeJS.Timeout | undefined }>({})
     const [syncBookToServerKeys, syncBookToServerKeysSet] = useState<(keyof bookType)[] | undefined>(undefined)
-
-    const placeHasAtLeastOneArea = book.locations.find(eachLocation => {
-        const seenPlaces = eachLocation.places
-
-        let hasAreas = false
-
-        seenPlaces.forEach(eachPlace => {
-            if (eachPlace.areas.length > 0) {
-                hasAreas = true
-            }
-        })
-
-        if (hasAreas) return eachLocation
-    }) !== undefined
 
     //validation checks
     const targetLanguagesValid = useMemo(() => {
@@ -217,7 +166,10 @@ Example:
     const storyPremiseValid = useMemo(() => {
         return checkStoryPremiseValid()
     }, [book.storyPremise, book.name])
-    const [locationsValid, locationsValidSet] = useState<boolean | undefined>(undefined)
+    const locationsValid = useMemo(() => {
+        return checkLocationsValid()
+
+    }, [book.locations])
     const [charactersValid, charactersValidSet] = useState<boolean | undefined>(undefined)
     const [goalsValid, goalsValidSet] = useState<boolean | undefined>(undefined)
     const storyValid = targetLanguagesValid && storyPremiseValid && locationsValid && charactersValid && goalsValid
@@ -308,7 +260,7 @@ Example:
 
         if (!checkTargetLanguagesValid()) storyValidLocal = false
         if (!checkStoryPremiseValid()) storyValidLocal = false
-        if (!checkLocationsValid(false)) storyValidLocal = false
+        if (!checkLocationsValid()) storyValidLocal = false
         if (!checkCharactersValid(false)) storyValidLocal = false
         if (!checkGoalsValid(false)) storyValidLocal = false
 
@@ -334,63 +286,6 @@ Example:
         }
     }, [])
 
-    async function makeConnections(passedLocations?: locationType[], givenAreas?: makeLocationsBodyType["givenAreas"]) {
-        try {
-            //start off
-            locationsValidSet(false)
-
-            toast.success("loading!")
-
-            //what function to call
-            const gptApiFunctionCallOption: gptApiFunctionCallOptionType = "makeLocations"
-
-            //make body
-            const newBody: makeLocationsBodyType = {
-                option: "areaConnections",
-                storyPremise: book.storyPremise,
-                allLocations: passedLocations,
-                givenAreas: givenAreas
-            }
-            const validatedBody = makeLocationsBodySchema.parse(newBody)
-
-            //send off to gpt api
-            const response = await fetch(`/api/gptConcurrent?functionCallOption=${gptApiFunctionCallOption}`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify(validatedBody)
-            })
-
-            //handle response
-            const seenResponse = await response.json()
-            const validatedResponse = makeLocationsResponseSchema.parse(seenResponse)
-            console.log(`$validatedResponse`, validatedResponse);
-
-            if (validatedResponse.results.type !== "areaConnections") return
-
-            //asign change locally
-            bookSet(prevBook => {
-                const newBook = { ...prevBook }
-
-                if (validatedResponse.results.type === "areaConnections") {
-                    newBook.areaConnections = [...newBook.areaConnections, ...validatedResponse.results.areaConnections]
-                }
-
-                return newBook
-            })
-
-            //sync to server
-            syncBookToServerKeysSet(["areaConnections"])
-
-            // after all resolved
-            toast.success("generated!")
-
-        } catch (error) {
-            consoleAndToastError(error)
-        }
-    }
-
     //validation functions
     function checkTargetLanguagesValid() {
         return book.targetLanguages.length > 0
@@ -408,188 +303,27 @@ Example:
 
         return true
     }
-    function checkLocationsValid(showNotifs = true) {
-        try {
-            //start off
-            locationsValidSet(false)
+    function checkLocationsValid() {
+        //ensure has an area 
+        //ensure has a place
+        if (book.locations.length === 0) return false
 
-            if (book.locations[0] === undefined) throw new Error("not seeing location")
-            if (book.locations[0].places[0] === undefined) throw new Error("not seeing place")
-            if (book.locations[0].places[0].areas[0] === undefined) throw new Error("not seeing area")
+        let foundPlace = false
+        let foundArea = false
 
-            const starterArea = book.locations[0].places[0].areas[0]
-            const simulatedConnections: areaConnectionType[] = []
+        book.locations.map(eachL => {
+            if (eachL.places.length > 0) {
+                foundPlace = true
 
-            loopUntilCompletion(book)
-            function loopUntilCompletion(passedBook: bookType) {
-                const reachableAreas: areaType[] = []
-                const nonReachableAreas: areaType[] = []
-
-                //calculate amtOfAreas
-                let amtOfAreas = 0
-                passedBook.locations.forEach(eachLMap => {
-                    eachLMap.places.forEach(eachPMap => {
-                        eachPMap.areas.forEach(() => {
-                            amtOfAreas++
-                        })
-                    })
+                eachL.places.map(eachP => {
+                    if (eachP.areas.length > 0) {
+                        foundArea = true
+                    }
                 })
-
-                //start off
-                recursiveCheck(starterArea, passedBook)
-                function recursiveCheck(area: areaType, passedBook: bookType) {
-                    //if already visited dont check
-                    if (reachableAreas.find(eachFind => eachFind.id === area.id) !== undefined) return
-
-                    //note which area visited
-                    reachableAreas.push(area)
-
-                    //highlight
-                    const seenEl = document.getElementById(area.id)
-
-                    if (seenEl !== null) {
-                        seenEl.classList.add("highlight")
-
-                        setTimeout(() => {
-                            seenEl.classList.remove("highlight")
-                        }, 10_000);
-                    }
-
-                    const seenAreaConnections = passedBook.areaConnections.filter(eachAreaConnection => {
-                        return (eachAreaConnection.firstId === area.id) || (eachAreaConnection.secondId === area.id)
-                    })
-
-                    seenAreaConnections.map(eachSeenAreaConnection => {
-                        const isFirst = eachSeenAreaConnection.firstId === area.id
-                        const linkedAreaId = isFirst ? eachSeenAreaConnection.secondId : eachSeenAreaConnection.firstId
-
-                        let foundArea: areaType | undefined = undefined
-
-                        //find linked area
-                        passedBook.locations.map(eachLMap => {
-                            eachLMap.places.map(eachPMap => {
-                                eachPMap.areas.map(eachAMap => {
-                                    if (eachAMap.id === linkedAreaId) {
-                                        foundArea = eachAMap
-                                    }
-                                })
-                            })
-                        })
-
-                        if (foundArea === undefined) {
-                            console.log(`$not seeing area for linkedAreaId`, linkedAreaId);
-                            return
-                        }
-
-                        //found linked area so recursive check
-                        recursiveCheck(foundArea, passedBook)
-                    })
-                }
-
-                //now compare all areas against that seenAreas - if not found note it
-                passedBook.locations.map(eachLMap => {
-                    eachLMap.places.map(eachPMap => {
-                        eachPMap.areas.map(eachAMap => {
-                            const foundInArray = reachableAreas.find(eachReachableArea => eachReachableArea.id === eachAMap.id) !== undefined
-
-                            //if not found in array note
-                            if (!foundInArray) {
-                                nonReachableAreas.push(eachAMap)
-                            }
-                        })
-                    })
-                })
-
-                console.log(`$reachableAreas`, reachableAreas);
-                console.log(`$nonReachableAreas`, nonReachableAreas);
-                console.log(`$amtOfAreas`, amtOfAreas);
-
-                //are things seen
-                if (reachableAreas.length !== amtOfAreas) {
-                    console.log(`$all not acounted for`);
-
-                    console.log(`$reachableAreas`, reachableAreas);
-                    console.log(`$nonReachableAreas`, nonReachableAreas);
-                    console.log(`$amtOfAreas`, amtOfAreas);
-
-                    //find leftMost non reachable area
-                    let leftMostNonReachableArea: areaType | null = null
-                    nonReachableAreas.forEach((eachNonReachableArea) => {
-                        //initialise
-                        if (leftMostNonReachableArea === null) leftMostNonReachableArea = eachNonReachableArea
-
-                        //comparison
-                        if (eachNonReachableArea.coordinates.x < leftMostNonReachableArea.coordinates.x) {
-                            leftMostNonReachableArea = eachNonReachableArea
-                        }
-                    })
-
-                    if (leftMostNonReachableArea === null) {
-                        console.log(`$not seeing leftMostNonReachableArea`);
-
-                        return
-                    }
-
-                    //find closest reachable area
-                    let closestReachableArea: areaType | null = null
-                    let distance: number | null = null
-
-                    reachableAreas.forEach((eachReachableArea) => {
-                        if (leftMostNonReachableArea === null) return
-
-                        const localDistance = eachReachableArea.coordinates.x - leftMostNonReachableArea.coordinates.x
-                        if (distance === null) distance = localDistance
-
-                        if (localDistance < distance) {
-                            distance = localDistance
-
-                            //asign closest x
-                            closestReachableArea = eachReachableArea
-                        }
-
-                    })
-
-                    if (closestReachableArea === null) {
-                        console.log(`$not seeing closestReachableArea`);
-
-                        return
-                    }
-
-                    const newAreaConnection: areaConnectionType = {
-                        // @ts-expect-error type
-                        firstId: closestReachableArea.id,
-                        // @ts-expect-error type
-                        secondId: leftMostNonReachableArea.id,
-                        travelDescription: defaultText
-                    }
-
-                    //add on suggestion
-                    simulatedConnections.push(newAreaConnection)
-
-                    //run again
-                    loopUntilCompletion({ ...passedBook, areaConnections: [...passedBook.areaConnections, newAreaConnection] })
-                }
             }
+        })
 
-            if (simulatedConnections.length === 0) {
-                //set valid
-                locationsValidSet(true)
-
-                return true
-            }
-
-            //save needed connections
-            neededSimulatedConnectionsSet(simulatedConnections)
-
-            return false
-
-        } catch (error) {
-            if (showNotifs) {
-                consoleAndToastError(error)
-            }
-
-            return false
-        }
+        return foundPlace && foundArea
     }
     function checkCharactersValid(showNotifs = true) {
         try {
@@ -611,14 +345,14 @@ Example:
 
             //ensure that all area id's accounted for
             book.characters.map(eachCharacter => {
-                if (eachCharacter.location.type === "area") {
+                if (eachCharacter.locationObj.type === "area") {
                     let foundCharacterArea = false
 
                     //check each area
                     book.locations.map(eachLMap => {
                         eachLMap.places.map(eachPMap => {
                             eachPMap.areas.map(eachAMap => {
-                                if (eachCharacter.location.type === "area" && eachAMap.id === eachCharacter.location.areaId) {
+                                if (eachCharacter.locationObj.type === "area" && eachAMap.id === eachCharacter.locationObj.areaId) {
                                     foundCharacterArea = true
                                 }
                             })
@@ -626,7 +360,7 @@ Example:
                     })
 
                     if (!foundCharacterArea) {
-                        console.log(`$eachCharacter.location`, eachCharacter.location);
+                        console.log(`$eachCharacter.location`, eachCharacter.locationObj);
                         throw new Error("not seeing area id for character location")
                     }
                 }
@@ -655,40 +389,20 @@ Example:
             book.goals.map(eachGoal => {
                 eachGoal.subGoals.map(eachSubGoal => {
                     //ensure that all area id's accounted for
-                    if (eachSubGoal.subGoalTypeObj.type === "exposition") {
-                        let foundGoalArea = false
+                    if (eachSubGoal.subGoalTypeObj.type === "exposition" && eachSubGoal.subGoalTypeObj.areaId !== null) {
+                        let foundGoalArea = getAreaFromId(book, eachSubGoal.subGoalTypeObj.areaId)
 
-                        //check each area
-                        book.locations.map(eachLMap => {
-                            eachLMap.places.map(eachPMap => {
-                                eachPMap.areas.map(eachAMap => {
-                                    if (eachSubGoal.subGoalTypeObj.type === "exposition" && eachAMap.id === eachSubGoal.subGoalTypeObj.areaId) {
-                                        foundGoalArea = true
-                                    }
-                                })
-                            })
-                        })
-
-                        if (!foundGoalArea) {
+                        if (foundGoalArea === undefined) {
                             console.log(`$eachSubGoal.subGoalTypeObj.areaId`, eachSubGoal.subGoalTypeObj.areaId);
-                            throw new Error("not seeing area id for goal area")
+                            throw new Error("not seeing area id for goal")
                         }
                     }
 
                     //ensure that all character id's accounted for
                     if (eachSubGoal.subGoalTypeObj.type === "defeat-character" || eachSubGoal.subGoalTypeObj.type === "interactive") {
-                        let foundGoalCharacter = false
+                        let foundGoalCharacter = getCharacterFromId(book, eachSubGoal.subGoalTypeObj.characterId)
 
-                        //check each area
-                        book.characters.map(eachCharacter => {
-                            if (eachSubGoal.subGoalTypeObj.type === "defeat-character" || eachSubGoal.subGoalTypeObj.type === "interactive") {
-                                if (eachCharacter.id === eachSubGoal.subGoalTypeObj.characterId) {
-                                    foundGoalCharacter = true
-                                }
-                            }
-                        })
-
-                        if (!foundGoalCharacter) {
+                        if (foundGoalCharacter === undefined) {
                             console.log(`$eachSubGoal.subGoalTypeObj.characterId`, eachSubGoal.subGoalTypeObj.characterId);
                             throw new Error("not seeing character id for goal")
                         }
@@ -875,9 +589,6 @@ Example:
                                 <button className='button2'
                                     onClick={async () => {
                                         try {
-                                            //start off
-                                            locationsValidSet(false)
-
                                             toast.success("loading!")
 
                                             //what function to call
@@ -926,52 +637,173 @@ Example:
                                     }}
                                 >Add locations</button>
 
-                                {placeHasAtLeastOneArea && (
+                                {book.locations.length > 0 && (
                                     <button className='button2'
                                         onClick={async () => {
-                                            await makeConnections(book.locations)
-                                        }}
-                                    >Make connections</button>
-                                )}
+                                            toast.success("loading!")
 
-                                {book.areaConnections.length > 0 && (
-                                    <button className='button2'
-                                        onClick={() => checkLocationsValid()}
-                                    >Test connections</button>
-                                )}
+                                            book.locations.map(async eachLocation => {
+                                                //only run on empty locations
+                                                if (eachLocation.places.length > 0) return
 
-                                {neededSimulatedConnections.length > 0 && (
-                                    <button className='button2'
-                                        onClick={async () => {
-                                            try {
-                                                //pass suggestions  to gpt
-                                                const seenAreas: areaType[] = []
+                                                //rate limit
+                                                await makeLocationPlacesRateLimit(async () => {
+                                                    await actualRun(eachLocation)
+                                                })
 
-                                                neededSimulatedConnections.map(eachNeededSimulatedConnection => {
-                                                    book.locations.map(eachLMap => {
-                                                        eachLMap.places.map(eachPMap => {
-                                                            eachPMap.areas.map(eachAMap => {
-                                                                if (eachNeededSimulatedConnection.firstId === eachAMap.id || eachNeededSimulatedConnection.secondId === eachAMap.id) {
-                                                                    seenAreas.push(eachAMap)
-                                                                }
-                                                            })
-                                                        })
+                                                // after all resolved
+                                                toast.success("generated!")
+                                            })
+
+                                            toast.success("generated!")
+
+                                            async function actualRun(eachLocation: locationType) {
+                                                try {
+                                                    //what function to call
+                                                    const gptApiFunctionCallOption: gptApiFunctionCallOptionType = "makeLocations"
+
+                                                    //make body
+                                                    const newBody: makeLocationsBodyType = {
+                                                        option: "places",
+                                                        storyPremise: book.storyPremise,
+                                                        location: eachLocation
+                                                    }
+                                                    const validatedBody = makeLocationsBodySchema.parse(newBody)
+
+                                                    //send off to gpt api
+                                                    const response = await fetch(`/api/gptConcurrent?functionCallOption=${gptApiFunctionCallOption}`, {
+                                                        method: "POST",
+                                                        headers: {
+                                                            "Content-Type": "application/json"
+                                                        },
+                                                        body: JSON.stringify(validatedBody)
                                                     })
-                                                })
 
-                                                await makeConnections(undefined, {
-                                                    areas: seenAreas,
-                                                    suggestedAreaConnections: neededSimulatedConnections
-                                                })
+                                                    //handle response
+                                                    const seenResponse = await response.json()
+                                                    const validatedResponse = makeLocationsResponseSchema.parse(seenResponse)
+                                                    console.log(`$validatedResponse`, validatedResponse);
 
-                                                //reset
-                                                neededSimulatedConnectionsSet([])
+                                                    if (validatedResponse.results.type !== "places") return
 
-                                            } catch (error) {
-                                                consoleAndToastError(error)
+                                                    //asign change locally
+                                                    bookSet(prevBook => {
+                                                        const newBook = { ...prevBook }
+                                                        newBook.locations = newBook.locations.map(eachLocationMap => {
+                                                            if (eachLocationMap.id === eachLocation.id) {
+                                                                //react
+                                                                eachLocationMap = { ...eachLocationMap }
+
+                                                                if (validatedResponse.results.type === "places") {
+                                                                    eachLocationMap.places = [...eachLocationMap.places, ...validatedResponse.results.places]
+                                                                }
+                                                            }
+
+                                                            return eachLocationMap
+                                                        })
+
+                                                        return newBook
+                                                    })
+
+                                                    //sync to server
+                                                    syncBookToServerKeysSet(["locations"])
+
+                                                } catch (error) {
+                                                    consoleAndToastError(error)
+                                                }
                                             }
                                         }}
-                                    >Fix connections</button>
+                                    >Add places</button>
+                                )}
+
+                                {book.locations.find(eachL => eachL.places.length > 0) !== undefined && (
+                                    <button className='button2'
+                                        onClick={async () => {
+                                            toast.success("loading!")
+
+                                            book.locations.map(async eachLocation => {
+                                                eachLocation.places.map(async eachPlace => {
+                                                    //only run on empty places
+                                                    if (eachPlace.areas.length > 0) return
+
+                                                    //rate limit
+                                                    await makePlaceAreasRateLimit(async () => {
+                                                        await actualRun(eachLocation, eachPlace)
+                                                    })
+
+                                                    //after all resolved
+                                                    toast.success("generated!")
+                                                })
+                                            })
+
+                                            async function actualRun(eachLocation: locationType, eachPlace: placeType) {
+                                                try {
+                                                    //what function to call
+                                                    const gptApiFunctionCallOption: gptApiFunctionCallOptionType = "makeLocations"
+
+                                                    //make body
+                                                    const newBody: makeLocationsBodyType = {
+                                                        option: "areas",
+                                                        storyPremise: book.storyPremise,
+                                                        location: eachLocation,
+                                                        place: eachPlace
+                                                    }
+                                                    const validatedBody = makeLocationsBodySchema.parse(newBody)
+
+                                                    //send off to gpt api
+                                                    const response = await fetch(`/api/gptConcurrent?functionCallOption=${gptApiFunctionCallOption}`, {
+                                                        method: "POST",
+                                                        headers: {
+                                                            "Content-Type": "application/json"
+                                                        },
+                                                        body: JSON.stringify(validatedBody)
+                                                    })
+
+                                                    //handle response
+                                                    const seenResponse = await response.json()
+                                                    const validatedResponse = makeLocationsResponseSchema.parse(seenResponse)
+                                                    console.log(`$validatedResponse`, validatedResponse);
+
+                                                    if (validatedResponse.results.type !== "areas") return
+
+                                                    //asign change locally
+                                                    bookSet(prevBook => {
+                                                        const newBook = { ...prevBook }
+
+                                                        newBook.locations = newBook.locations.map(eachLocationMap => {
+                                                            if (eachLocationMap.id === eachLocation.id) {
+                                                                //react
+                                                                eachLocationMap = { ...eachLocationMap }
+
+                                                                eachLocationMap.places = eachLocationMap.places.map(eachPlaceMap => {
+                                                                    if (eachPlaceMap.id === eachPlace.id) {
+                                                                        //react
+                                                                        eachPlaceMap = { ...eachPlaceMap }
+
+                                                                        if (validatedResponse.results.type === "areas") {
+                                                                            eachPlaceMap.areas = [...eachPlaceMap.areas, ...validatedResponse.results.areas]
+                                                                        }
+                                                                    }
+
+                                                                    return eachPlaceMap
+                                                                })
+                                                            }
+
+                                                            return eachLocationMap
+                                                        })
+
+                                                        return newBook
+                                                    })
+
+                                                    //sync to server
+                                                    syncBookToServerKeysSet(["locations"])
+
+                                                } catch (error) {
+                                                    consoleAndToastError(error)
+                                                }
+                                            }
+                                        }}
+                                    >Add areas</button>
                                 )}
                             </div>
 
@@ -987,80 +819,6 @@ Example:
 
                                             <b>Places:</b>
 
-                                            <button className='button2'
-                                                onClick={async () => {
-                                                    toast.success("loading!")
-
-                                                    book.locations.map(async eachLocation => {
-                                                        //rate limit
-                                                        await makeLocationPlacesRateLimit(async () => {
-                                                            await actualRun(eachLocation)
-                                                        })
-
-                                                        // after all resolved
-                                                        toast.success("generated!")
-                                                    })
-
-                                                    toast.success("generated!")
-
-                                                    async function actualRun(eachLocation: locationType) {
-                                                        try {
-                                                            //what function to call
-                                                            const gptApiFunctionCallOption: gptApiFunctionCallOptionType = "makeLocations"
-
-                                                            //make body
-                                                            const newBody: makeLocationsBodyType = {
-                                                                option: "places",
-                                                                storyPremise: book.storyPremise,
-                                                                location: eachLocation
-                                                            }
-                                                            const validatedBody = makeLocationsBodySchema.parse(newBody)
-
-                                                            //send off to gpt api
-                                                            const response = await fetch(`/api/gptConcurrent?functionCallOption=${gptApiFunctionCallOption}`, {
-                                                                method: "POST",
-                                                                headers: {
-                                                                    "Content-Type": "application/json"
-                                                                },
-                                                                body: JSON.stringify(validatedBody)
-                                                            })
-
-                                                            //handle response
-                                                            const seenResponse = await response.json()
-                                                            const validatedResponse = makeLocationsResponseSchema.parse(seenResponse)
-                                                            console.log(`$validatedResponse`, validatedResponse);
-
-                                                            if (validatedResponse.results.type !== "places") return
-
-                                                            //asign change locally
-                                                            bookSet(prevBook => {
-                                                                const newBook = { ...prevBook }
-                                                                newBook.locations = newBook.locations.map(eachLocationMap => {
-                                                                    if (eachLocationMap.id === eachLocation.id) {
-                                                                        //react
-                                                                        eachLocationMap = { ...eachLocationMap }
-
-                                                                        if (validatedResponse.results.type === "places") {
-                                                                            eachLocationMap.places = [...eachLocationMap.places, ...validatedResponse.results.places]
-                                                                        }
-                                                                    }
-
-                                                                    return eachLocationMap
-                                                                })
-
-                                                                return newBook
-                                                            })
-
-                                                            //sync to server
-                                                            syncBookToServerKeysSet(["locations"])
-
-                                                        } catch (error) {
-                                                            consoleAndToastError(error)
-                                                        }
-                                                    }
-                                                }}
-                                            >Add places</button>
-
                                             <div className='gridColumn snap'>
                                                 {eachLocation.places.length === 0 && (
                                                     <p>No places in location yet</p>
@@ -1073,111 +831,15 @@ Example:
 
                                                             <b>Areas:</b>
 
-                                                            <button className='button2'
-                                                                onClick={async () => {
-                                                                    toast.success("loading!")
-
-                                                                    book.locations.map(async eachLocation => {
-                                                                        eachLocation.places.map(async eachPlace => {
-                                                                            //rate limit
-                                                                            await makePlaceAreasRateLimit(async () => {
-                                                                                await actualRun(eachLocation, eachPlace)
-                                                                            })
-
-                                                                            // after all resolved
-                                                                            toast.success("generated!")
-                                                                        })
-                                                                    })
-
-                                                                    async function actualRun(eachLocation: locationType, eachPlace: placeType) {
-                                                                        try {
-                                                                            //what function to call
-                                                                            const gptApiFunctionCallOption: gptApiFunctionCallOptionType = "makeLocations"
-
-                                                                            //make body
-                                                                            const newBody: makeLocationsBodyType = {
-                                                                                option: "areas",
-                                                                                storyPremise: book.storyPremise,
-                                                                                location: eachLocation,
-                                                                                place: eachPlace
-                                                                            }
-                                                                            const validatedBody = makeLocationsBodySchema.parse(newBody)
-
-                                                                            //send off to gpt api
-                                                                            const response = await fetch(`/api/gptConcurrent?functionCallOption=${gptApiFunctionCallOption}`, {
-                                                                                method: "POST",
-                                                                                headers: {
-                                                                                    "Content-Type": "application/json"
-                                                                                },
-                                                                                body: JSON.stringify(validatedBody)
-                                                                            })
-
-                                                                            //handle response
-                                                                            const seenResponse = await response.json()
-                                                                            const validatedResponse = makeLocationsResponseSchema.parse(seenResponse)
-                                                                            console.log(`$validatedResponse`, validatedResponse);
-
-                                                                            if (validatedResponse.results.type !== "areas") return
-
-                                                                            //asign change locally
-                                                                            bookSet(prevBook => {
-                                                                                const newBook = { ...prevBook }
-
-                                                                                newBook.locations = newBook.locations.map(eachLocationMap => {
-                                                                                    if (eachLocationMap.id === eachLocation.id) {
-                                                                                        //react
-                                                                                        eachLocationMap = { ...eachLocationMap }
-
-                                                                                        eachLocationMap.places = eachLocationMap.places.map(eachPlaceMap => {
-                                                                                            if (eachPlaceMap.id === eachPlace.id) {
-                                                                                                //react
-                                                                                                eachPlaceMap = { ...eachPlaceMap }
-
-                                                                                                if (validatedResponse.results.type === "areas") {
-                                                                                                    eachPlaceMap.areas = [...eachPlaceMap.areas, ...validatedResponse.results.areas]
-                                                                                                }
-                                                                                            }
-
-                                                                                            return eachPlaceMap
-                                                                                        })
-                                                                                    }
-
-                                                                                    return eachLocationMap
-                                                                                })
-
-                                                                                return newBook
-                                                                            })
-
-                                                                            //sync to server
-                                                                            syncBookToServerKeysSet(["locations"])
-
-                                                                        } catch (error) {
-                                                                            consoleAndToastError(error)
-                                                                        }
-                                                                    }
-                                                                }}
-                                                            >Add areas</button>
-
                                                             <div className='gridColumn snap'>
                                                                 {eachPlace.areas.length === 0 && (
                                                                     <p>No areas in place yet</p>
                                                                 )}
 
                                                                 {eachPlace.areas.map(eachArea => {
-                                                                    let totalConnections: areaConnectionType[] = []
-
-                                                                    book.areaConnections.forEach(eachAreaConnection => {
-                                                                        //if seen in first or second field count it
-                                                                        if (eachAreaConnection.firstId === eachArea.id || eachAreaConnection.secondId === eachArea.id) {
-                                                                            totalConnections.push(eachAreaConnection)
-                                                                        }
-                                                                    })
-
                                                                     return (
                                                                         <div key={eachArea.id} className='simpleContainer'>
                                                                             <h3>{eachArea.name}</h3>
-
-                                                                            <p>connections: {totalConnections.length}</p>
                                                                         </div>
                                                                     )
                                                                 })}
@@ -1191,9 +853,11 @@ Example:
                                 })}
                             </div>
 
-                            <div style={{ maxHeight: "400px", display: "grid", overflow: "auto" }}>
-                                <ViewLocations book={book} locations={book.locations} areaConnections={book.areaConnections} />
-                            </div>
+                            {book.locations.length !== 0 && (
+                                <div style={{ maxHeight: "400px", display: "grid", overflow: "auto" }}>
+                                    <ViewLocations book={book} locations={book.locations} />
+                                </div>
+                            )}
                         </div>
                     )}
                 />
@@ -1217,21 +881,11 @@ Example:
                                                 //what function to call
                                                 const gptApiFunctionCallOption: gptApiFunctionCallOptionType = "makeCharacters"
 
-                                                //add in variables
-                                                let updatedBaseInstructions = createCharactersPromptInfo.baseInstructions
-
-                                                //location
-                                                updatedBaseInstructions = updatedBaseInstructions.replaceAll("[[locations]]", JSON.stringify(book.locations))
-
-                                                //prev characters
-                                                if (book.characters.length > 0) {
-                                                    updatedBaseInstructions = updatedBaseInstructions.replaceAll("[[characters]]", JSON.stringify(book.characters))
-                                                }
-
                                                 //make body
                                                 const newBody: makeCharactersBodyType = {
                                                     prompt: createCharactersPromptInfo.prompt,
-                                                    baseInstructions: updatedBaseInstructions
+                                                    prevCharacters: book.characters,
+                                                    locations: book.locations
                                                 }
                                                 const validatedBody = makeCharactersBodySchema.parse(newBody)
 
@@ -1283,16 +937,8 @@ Example:
                                 {book.characters.map(eachCharacter => {
                                     let currentArea: areaType | undefined = undefined
 
-                                    if (eachCharacter.location.type === "area") {
-                                        book.locations.map(eachLMap => {
-                                            eachLMap.places.map(eachPMap => {
-                                                eachPMap.areas.map(eachAMap => {
-                                                    if (eachCharacter.location.type === "area" && eachAMap.id === eachCharacter.location.areaId) {
-                                                        currentArea = eachAMap
-                                                    }
-                                                })
-                                            })
-                                        })
+                                    if (eachCharacter.locationObj.type === "area") {
+                                        currentArea = getAreaFromId(book, eachCharacter.locationObj.areaId)
                                     }
 
                                     return (
@@ -1301,16 +947,16 @@ Example:
 
                                             <p>{eachCharacter.type}</p>
 
-                                            <div>
+                                            <div className="simpleGrid">
                                                 <b>location</b>
-                                                {eachCharacter.location.type === "withPlayer" ? (
+
+                                                {eachCharacter.locationObj.type === "withPlayer" ? (
                                                     <>
                                                         <p>with player</p>
                                                     </>
                                                 ) : (
                                                     <>
                                                         {currentArea !== undefined ? (
-                                                            // @ts-expect-error type
                                                             <p>{currentArea.name}</p>
                                                         ) : (
                                                             <p>not seeing area</p>
@@ -1320,46 +966,88 @@ Example:
                                             </div>
 
                                             <ShowMore
-                                                label="personality"
+                                                label="show more"
                                                 content={(
-                                                    <>
-                                                        <p>{eachCharacter.personality}</p>
-                                                    </>
-                                                )}
-                                            />
-                                            <ShowMore
-                                                label="likes"
-                                                content={(
-                                                    <div className='simpleGrid'>
-                                                        {eachCharacter.likes.map((each, eachIndex) => {
-                                                            return (
-                                                                <p key={eachIndex}>{each}</p>
-                                                            )
-                                                        })}
-                                                    </div>
-                                                )}
-                                            />
-                                            <ShowMore
-                                                label="dislikes"
-                                                content={(
-                                                    <div className='simpleGrid'>
-                                                        {eachCharacter.dislikes.map((each, eachIndex) => {
-                                                            return (
-                                                                <p key={eachIndex}>{each}</p>
-                                                            )
-                                                        })}
-                                                    </div>
-                                                )}
-                                            />
-                                            <ShowMore
-                                                label="skills/abilities"
-                                                content={(
-                                                    <div className='simpleGrid'>
-                                                        {eachCharacter.skillsAndAbilities.map((each, eachIndex) => {
-                                                            return (
-                                                                <p key={eachIndex}>{each}</p>
-                                                            )
-                                                        })}
+                                                    <div>
+                                                        <div>
+                                                            <p>age</p>
+                                                            <p>{eachCharacter.age}</p>
+                                                        </div>
+
+                                                        <ShowMore
+                                                            label="personality"
+                                                            content={(
+                                                                <>
+                                                                    <p>{eachCharacter.personality}</p>
+                                                                </>
+                                                            )}
+                                                        />
+
+                                                        <ShowMore
+                                                            label="visual descriptions"
+                                                            content={(
+                                                                <>
+                                                                    <p>{eachCharacter.visualDescription}</p>
+                                                                </>
+                                                            )}
+                                                        />
+
+                                                        <div>
+                                                            <p>status</p>
+                                                            <p>{eachCharacter.status}</p>
+                                                        </div>
+
+                                                        <ShowMore
+                                                            label="likes"
+                                                            content={(
+                                                                <div className='simpleGrid'>
+                                                                    {eachCharacter.likes.map((each, eachIndex) => {
+                                                                        return (
+                                                                            <p key={eachIndex}>{each}</p>
+                                                                        )
+                                                                    })}
+                                                                </div>
+                                                            )}
+                                                        />
+
+                                                        <ShowMore
+                                                            label="dislikes"
+                                                            content={(
+                                                                <div className='simpleGrid'>
+                                                                    {eachCharacter.dislikes.map((each, eachIndex) => {
+                                                                        return (
+                                                                            <p key={eachIndex}>{each}</p>
+                                                                        )
+                                                                    })}
+                                                                </div>
+                                                            )}
+                                                        />
+
+                                                        <ShowMore
+                                                            label="skills/abilities"
+                                                            content={(
+                                                                <div className='simpleGrid'>
+                                                                    {eachCharacter.skillsAndAbilities.map((each, eachIndex) => {
+                                                                        return (
+                                                                            <p key={eachIndex}>{each}</p>
+                                                                        )
+                                                                    })}
+                                                                </div>
+                                                            )}
+                                                        />
+
+                                                        <ShowMore
+                                                            label="memories"
+                                                            content={(
+                                                                <div className='simpleGrid'>
+                                                                    {eachCharacter.memories.map((each, eachIndex) => {
+                                                                        return (
+                                                                            <p key={eachIndex}>{each}</p>
+                                                                        )
+                                                                    })}
+                                                                </div>
+                                                            )}
+                                                        />
                                                     </div>
                                                 )}
                                             />
@@ -1462,34 +1150,18 @@ Example:
                                                     let seenCharacterToDefeat: characterType | undefined = undefined
 
                                                     //get referenced area
-                                                    if (eachSubGoal.subGoalTypeObj.type === "exposition") {
-                                                        book.locations.map(eachLMap => {
-                                                            eachLMap.places.map(eachPMap => {
-                                                                eachPMap.areas.map(eachAMap => {
-                                                                    if (eachSubGoal.subGoalTypeObj.type === "exposition" && eachAMap.id === eachSubGoal.subGoalTypeObj.areaId) {
-                                                                        currentArea = eachAMap
-                                                                    }
-                                                                })
-                                                            })
-                                                        })
+                                                    if (eachSubGoal.subGoalTypeObj.type === "exposition" && eachSubGoal.subGoalTypeObj.areaId !== null) {
+                                                        currentArea = getAreaFromId(book, eachSubGoal.subGoalTypeObj.areaId)
                                                     }
 
                                                     //get seenCharacterToDefeat
                                                     if (eachSubGoal.subGoalTypeObj.type === "defeat-character") {
-                                                        book.characters.map(eachCharacter => {
-                                                            if (eachSubGoal.subGoalTypeObj.type === "defeat-character" && eachCharacter.id === eachSubGoal.subGoalTypeObj.characterId) {
-                                                                seenCharacterToDefeat = eachCharacter
-                                                            }
-                                                        })
+                                                        seenCharacterToDefeat = getCharacterFromId(book, eachSubGoal.subGoalTypeObj.characterId)
                                                     }
 
                                                     //get seenCharacterToConvince
                                                     if (eachSubGoal.subGoalTypeObj.type === "interactive") {
-                                                        book.characters.map(eachCharacter => {
-                                                            if (eachSubGoal.subGoalTypeObj.type === "interactive" && eachCharacter.id === eachSubGoal.subGoalTypeObj.characterId) {
-                                                                seenCharacterToConvince = eachCharacter
-                                                            }
-                                                        })
+                                                        seenCharacterToConvince = getCharacterFromId(book, eachSubGoal.subGoalTypeObj.characterId)
                                                     }
 
                                                     return (
@@ -1508,9 +1180,8 @@ Example:
 
                                                                     {currentArea !== undefined ? (
                                                                         <>
-                                                                            <p>visit:</p>
+                                                                            <p>Area:</p>
                                                                             <p>{
-                                                                                // @ts-expect-error type
                                                                                 currentArea.name
                                                                             }</p>
                                                                         </>
@@ -1528,7 +1199,6 @@ Example:
                                                                         <>
                                                                             <p>defeat:</p>
                                                                             <p>{
-                                                                                // @ts-expect-error type
                                                                                 seenCharacterToDefeat.name
                                                                             }</p>
                                                                         </>
@@ -1545,7 +1215,6 @@ Example:
                                                                     {seenCharacterToConvince !== undefined ? (
                                                                         <>
                                                                             <p>{
-                                                                                // @ts-expect-error type
                                                                                 seenCharacterToConvince.name
                                                                             }</p>
 
@@ -1642,7 +1311,7 @@ Example:
                                 <ViewGoalsSubGoals book={book} />
                             </div>
 
-                            <ViewLocations book={book} locations={book.locations} areaConnections={book.areaConnections} />
+                            <ViewLocations book={book} locations={book.locations} />
                         </div>
                     </div>
                 </div>
