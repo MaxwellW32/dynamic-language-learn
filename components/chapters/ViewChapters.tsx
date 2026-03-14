@@ -7,7 +7,7 @@ import toast from 'react-hot-toast'
 import { v4 as uuidV4 } from 'uuid'
 import ShowMore from '../showMore/ShowMore'
 import ViewChatSection from './ViewChatSection'
-import { chooseRandomTargetLanguage, ensurePlayer, getImportantCharacters, getImportantLocations, getLatestGoalSubGoal, getRelevantGoals, getRelevantSections } from '@/utility/contextHelpers'
+import { chooseRandomTargetLanguage, ensurePlayer, getImportantCharacters, getImportantLocations, getLatestGoalSubGoal, getRelevantGoals, getRelevantSections, makeNativeTargetKey } from '@/utility/contextHelpers'
 import { useAtom } from 'jotai'
 import { defaultText } from '@/lib/defaultData'
 import DisplayTranslatableTexts from './DisplayTranslatableTexts'
@@ -304,7 +304,37 @@ function ViewChapter({ user, userSet, eachChapter, chapters, chapterUpdater, boo
                     id: uuidV4(),
                     sectionObj: {
                         type: "gameMode",
-                        defeatCharacterSubGoalId: latestSubGoal.id
+                        defeatCharacterSubGoalId: latestSubGoal.id,
+                        gameModes: latestSubGoal.subGoalTypeObj.gameModes.map(eachGameMode => {
+                            //each game mode - get words return em
+                            //only return dictionary gamemode for now
+
+                            const nativeTargetKey = makeNativeTargetKey(user.languageSettings.native, targetLanguageToGenerate)
+                            const seenLessons = interactedLanguageLessons[nativeTargetKey]
+
+                            if (seenLessons === undefined) throw new Error("not seeing lessons")
+
+                            const seenDictEntries = Object.entries(seenLessons.dictionary.seen)
+                            let amtLeft = 10 - seenDictEntries.length
+                            if (amtLeft < 0) amtLeft = 0
+
+                            const totalToUseDictEntries = [...Object.entries(seenLessons.dictionary.seen), ...Object.entries(seenLessons.dictionary.new).slice(0, amtLeft)]
+                            console.log(`$totalToUseDictEntries`, totalToUseDictEntries);
+
+                            return {
+                                type: "meaning",
+                                language: targetLanguageToGenerate,
+                                words: totalToUseDictEntries.map(eachEntry => {
+                                    const eachDictionaryKey = eachEntry[0]
+
+                                    return {
+                                        id: eachDictionaryKey,
+                                        successStatus: undefined,
+                                        gotWrongFirstTime: false,
+                                    }
+                                })
+                            }
+                        })
                     }
                 }
 

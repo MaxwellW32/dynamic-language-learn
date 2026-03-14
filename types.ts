@@ -267,6 +267,26 @@ export const gameModeSectionSchema = z.object({
     //chat room created - relax talk to your fav characters
     type: z.literal("gameMode"),
     defeatCharacterSubGoalId: z.string().min(1).nullable(),//has defeatCharacter subGoal id or null
+    gameModes: z.union([
+        z.object({
+            type: z.literal("meaning"),
+            language: chosenLanguageOptionSchema,
+            words: z.object({
+                id: z.string().min(1),
+                successStatus: z.boolean().optional(),
+                gotWrongFirstTime: z.boolean(),
+            }).array()
+        }),
+        z.object({
+            type: z.literal("pronounciation"),
+            wordsToPronounce: z.object({
+                id: z.string().min(1),
+                prnc: z.string().min(1),
+                successStatus: z.boolean().optional(),
+                gotWrongFirstTime: z.boolean(),
+            }).array()
+        }),
+    ]).array(),
 })
 export type gameModeSectionType = z.infer<typeof gameModeSectionSchema>
 

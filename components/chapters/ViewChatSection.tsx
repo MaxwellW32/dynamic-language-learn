@@ -1,5 +1,5 @@
 import { gradeInteractiveSubGoal, makeChatMessagesResponse } from "@/serverFunctions/handleChapters"
-import { areaType, bookType, changeMasteryPropsType, chapterType, characterType, createSubGoalPropsType, goalType, interactedLanguageLessonsType, languageLessonType, locationType, sectionChatMessageType, sectionType, userType } from "@/types"
+import { bookType, changeMasteryPropsType, chapterType, characterType, createSubGoalPropsType, goalType, interactedLanguageLessonsType, languageLessonType, locationType, sectionChatMessageType, sectionType, userType } from "@/types"
 import { consoleAndToastError } from "@/utility/consoleErrorWithToast"
 import { chooseRandomTargetLanguage, ensurePlayer, getCharacterFromId, getImportantCharacters, getImportantLocations, getRelevantGoals, getRelevantSections } from "@/utility/contextHelpers"
 import React, { useState, useRef, useEffect, useMemo } from "react"
@@ -28,7 +28,6 @@ export default function ViewChatSection({ user, seenSectionId, chatSection, each
         return seenSubGoal
 
     }, [book.goals, chatSection.interactiveSubGoalId])
-
 
     // auto scroll to bottom when messages change
     useEffect(() => {
