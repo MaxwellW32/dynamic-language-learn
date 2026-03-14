@@ -1,6 +1,6 @@
 import { chosenGptModel, openai } from "@/lib/openai";
 import { NextResponse } from "next/server";
-import { areaResponseSchema, areaSchema, areaType, characterSchema, characterType, gptApiFunctionCallOptionSchema, locationResponseSchema, locationSchema, locationType, makeCharactersBodySchema, makeCharactersBodyType, makeCharactersResponseSchema, makeCharactersResponseType, makeGoalsBodySchema, makeGoalsBodyType, makeGoalsResponseSchema, makeGoalsResponseType, makeLocationsBodySchema, makeLocationsBodyType, makeLocationsResponseSchema, makeLocationsResponseType, makeStoryPremiseBodySchema, makeStoryPremiseBodyType, makeStoryPremiseResponseSchema, makeStoryPremiseResponseType, placeResponseSchema, placeSchema, placeType } from "@/types";
+import { areaResponseSchema, areaType, characterSchema, characterType, gptApiFunctionCallOptionSchema, locationResponseSchema, locationSchema, locationType, makeCharactersBodySchema, makeCharactersBodyType, makeCharactersResponseSchema, makeCharactersResponseType, makeGoalsBodySchema, makeGoalsBodyType, makeGoalsResponseSchema, makeGoalsResponseType, makeLocationsBodySchema, makeLocationsBodyType, makeLocationsResponseSchema, makeLocationsResponseType, makeStoryPremiseBodySchema, makeStoryPremiseBodyType, makeStoryPremiseResponseSchema, makeStoryPremiseResponseType, placeResponseSchema, placeSchema, placeType } from "@/types";
 import { errorZodErrorAsString } from "@/utility/consoleErrorWithToast";
 import { zodTextFormat } from "openai/helpers/zod";
 import { v4 as uuidV4 } from "uuid"
@@ -272,7 +272,7 @@ Example:
     return validatedResponse
 }
 
-async function makeGoals({ storyPremise, locations, characters, prevGoals }: makeGoalsBodyType): Promise<makeGoalsResponseType> {
+async function makeGoals({ option, storyPremise, locations, characters, prevGoals, forSubGoal }: makeGoalsBodyType): Promise<makeGoalsResponseType> {
     //add to reduced areas
     characters = characters.map(eachCharacter => {
         //reduce
@@ -281,12 +281,15 @@ async function makeGoals({ storyPremise, locations, characters, prevGoals }: mak
         return eachCharacter
     })
 
+    if (option === "subGoals" && forSubGoal === undefined) throw new Error("need forSubGoal obj")
+
     const instructions = `You are a narrative game designer creating structured gameplay progression for an AI-driven story game. Your job is to design major story goals and the actionable subGoals that the player must complete to progress through the story.
 
 Goals represent the major narrative beats of the story.
 SubGoals represent the concrete actions the player performs to achieve each goal.
 
 The final output must feel like a well-paced novel combined with a playable RPG quest system.
+${option === 'goals' ? `
 ========================
 STORY STRUCTURE
 ========================
@@ -346,6 +349,13 @@ SUBGOAL STRUCTURE
 Each goal must contain roughly 15 subGoals.
 SubGoals represent the individual actions the player performs.
 They should form a logical sequence that progresses the player through the goal.
+` : ''}
+${forSubGoal !== undefined && forSubGoal.forFailedSubGoal !== undefined && `
+The player failed the current subGoal
+subGoalId:
+${forSubGoal.forFailedSubGoal.subGoalId}
+
+The new subGoals you make will replace the one failed, allowing the player a new way to accomplish the goal.`}
 
 ========================
 SUBGOAL TYPES
@@ -463,15 +473,15 @@ ${JSON.stringify(locations)}
 Characters:
 ${JSON.stringify(characters)}
 
-Previously Generated Goals:
-${JSON.stringify(prevGoals)}
+${option === "goals" ? `Previously Generated Goals:\n${JSON.stringify(prevGoals)}` : ``}
+${option === "subGoals" && forSubGoal !== undefined ? `RelevantGoals:\n${JSON.stringify(forSubGoal.relevantGoals)}` : ``}
 
 ========================
 IMPORTANT OUTPUT RULES
 ========================
-- Generate ONLY goals needed to continue the story progression.
+${option === "goals" ? `- Generate ONLY goals needed to continue the story progression.
 - Do not repeat previously generated goals.
-- Ensure goals logically follow previous ones.
+- Ensure goals logically follow previous ones.` : ""}
 - Only use valid characterId and areaId values.`
 
     console.log(`$instructions`, instructions);
@@ -488,20 +498,32 @@ IMPORTANT OUTPUT RULES
     //validate
     const validatedResponse = makeGoalsResponseSchema.parse(response.output_parsed)
 
-    //assign ids to each goal and subGoal
-    validatedResponse.goals = validatedResponse.goals.map(eachGoal => {
-        //assign id
-        eachGoal.id = uuidV4()
+    if (validatedResponse.results.type === "goal") {
+        //assign ids to each goal and subGoal
+        validatedResponse.results.goals = validatedResponse.results.goals.map(eachGoal => {
+            //assign id
+            eachGoal.id = uuidV4()
 
-        eachGoal.subGoals = eachGoal.subGoals.map(eachSubGoal => {
+            eachGoal.subGoals = eachGoal.subGoals.map(eachSubGoal => {
+                //assign id
+                eachSubGoal.id = uuidV4()
+
+                return eachSubGoal
+            })
+
+            return eachGoal
+        })
+
+    } else if (validatedResponse.results.type === "subGoal") {
+        //assign ids to each goal and subGoal
+        validatedResponse.results.subGoals = validatedResponse.results.subGoals.map(eachSubGoal => {
             //assign id
             eachSubGoal.id = uuidV4()
 
             return eachSubGoal
         })
+    }
 
-        return eachGoal
-    })
 
     return validatedResponse
 }

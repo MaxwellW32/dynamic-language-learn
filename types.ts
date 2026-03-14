@@ -60,6 +60,11 @@ export type changeMasteryPropsType = {
     onlyIfAbsent?: boolean, //only updates value if not there
 }
 
+export type createSubGoalPropsType = {
+    goalId: string,
+    failedSubGoalId?: string
+}
+
 
 
 
@@ -225,7 +230,11 @@ export type goalType = z.infer<typeof goalSchema>
 
 
 //sections
-export const translatableTextSchema = z.union([z.object({ type: z.literal("fw"), id: z.string().min(1), languageName: chosenLanguageOptionSchema.shape.name, languageDialect: z.string().min(1).nullable() }), z.string()])
+export const translatableTextSchema = z.union([
+    z.object({ type: z.literal("fw"), id: z.string().min(1), languageName: chosenLanguageOptionSchema.shape.name, languageDialect: z.string().min(1).nullable() }),
+    z.object({ type: z.literal("gptWord"), word: z.string().min(1), meaning: z.string().min(1), pronunciation: z.string().min(1), languageName: chosenLanguageOptionSchema.shape.name, languageDialect: z.string().min(1).nullable() }),
+    z.string(),
+])
 export type translatableTextType = z.infer<typeof translatableTextSchema>
 
 export const expositionSectionSchema = z.object({
@@ -367,16 +376,33 @@ export type makeCharactersResponseType = z.infer<typeof makeCharactersResponseSc
 
 
 //make goals
+const goalOptions = ["goals", "subGoals"] as const
+
 export const makeGoalsBodySchema = z.object({
+    option: z.enum(goalOptions),
     storyPremise: z.string().min(1),
     prevGoals: goalSchema.array(),
     locations: locationSchema.array(),
     characters: characterSchema.array(),
+    forSubGoal: z.object({
+        relevantGoals: goalSchema.array(),
+        forFailedSubGoal: z.object({
+            subGoalId: z.string().min(1)
+        }).optional()
+    }).optional()
 })
 export type makeGoalsBodyType = z.infer<typeof makeGoalsBodySchema>
 
+export const goalResponseSchema = z.object({
+    type: z.literal("goal"),
+    goals: goalSchema.array(),
+})
+export const subGoalResponseSchema = z.object({
+    type: z.literal("subGoal"),
+    subGoals: goalSchema.shape.subGoals,
+})
 export const makeGoalsResponseSchema = z.object({
-    goals: goalSchema.array()
+    results: z.union([goalResponseSchema, subGoalResponseSchema]),
 })
 export type makeGoalsResponseType = z.infer<typeof makeGoalsResponseSchema>
 
@@ -422,12 +448,16 @@ export const makeChapterSectionsResponseSchema = z.object({
 export type makeChapterSectionsResponseType = z.infer<typeof makeChapterSectionsResponseSchema>
 
 
-
-
 export const makeChatMessagesResponseSchema = z.object({
     chatMessages: sectionChatMessageSchema.array(),
 })
 export type makeChatMessagesResponseType = z.infer<typeof makeChatMessagesResponseSchema>
+
+
+export const makeGradeInteractiveSubGoalResponseSchema = z.object({
+    complete: z.boolean(),
+})
+export type makeGradeInteractiveSubGoalResponseType = z.infer<typeof makeGradeInteractiveSubGoalResponseSchema>
 
 
 

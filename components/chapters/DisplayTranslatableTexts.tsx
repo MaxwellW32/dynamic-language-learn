@@ -13,10 +13,13 @@ export default function DisplayTranslatableTexts({ user, translatableTexts, lang
         let combinedKey: string | null = null
 
         if (typeof eachTranslatableText === "object") {
+          //find word for foreignWord type
           combinedKey = makeNativeTargetKey(user.languageSettings.native, { name: eachTranslatableText.languageName, dialect: eachTranslatableText.languageDialect === null ? undefined : eachTranslatableText.languageDialect })
 
-          if (languageLessons[combinedKey] !== undefined) {
-            foundWord = languageLessons[combinedKey].dictionary[eachTranslatableText.id]
+          if (eachTranslatableText.type === "fw") {
+            if (languageLessons[combinedKey] !== undefined) {
+              foundWord = languageLessons[combinedKey].dictionary[eachTranslatableText.id]
+            }
           }
         }
 
@@ -25,10 +28,26 @@ export default function DisplayTranslatableTexts({ user, translatableTexts, lang
           <React.Fragment key={eachTranslatableTextIndex}>
             {typeof eachTranslatableText === "object" ? (
               <>
-                {foundWord !== undefined ? (
-                  <WordReveal word={foundWord} wordId={eachTranslatableText.id} combinedKey={combinedKey!} changeMastery={changeMastery} />
-                ) : (
-                  <p>not seeing word</p>
+                {eachTranslatableText.type === "fw" && (
+                  <>
+                    {foundWord !== undefined ? (
+                      <WordReveal word={foundWord} wordId={eachTranslatableText.id} combinedKey={combinedKey!} changeMastery={changeMastery} />
+                    ) : (
+                      <p>not seeing word</p>
+                    )}
+                  </>
+                )}
+
+                {eachTranslatableText.type === "gptWord" && (
+                  <>
+                    <WordReveal wordId={""} combinedKey={combinedKey!} changeMastery={changeMastery}
+                      word={{
+                        word: eachTranslatableText.word,
+                        mng: eachTranslatableText.meaning,
+                        prnc: eachTranslatableText.pronunciation
+                      }}
+                    />
+                  </>
                 )}
               </>
             ) : (
@@ -101,15 +120,19 @@ function WordReveal({ word, wordId, combinedKey, changeMastery }: { word: dictio
           //open
           setOpen(!open)
 
-          //check if mastered - assign seen
-          //get user obj = see if there, if not add with mastery 1
-          changeMastery({
-            nativeTargetKey: combinedKey,
-            option: "dictionary",
-            updateId: wordId,
-            increment: 1,
-            onlyIfAbsent: true,
-          })
+          //only run for fw types
+          if (combinedKey !== "") {
+            //check if mastered - assign seen
+            //get user obj = see if there, if not add with mastery 1
+            changeMastery({
+              nativeTargetKey: combinedKey,
+              option: "dictionary",
+              updateId: wordId,
+              increment: 1,
+              onlyIfAbsent: true,
+            })
+          }
+
         }}
         style={{
           cursor: "pointer",

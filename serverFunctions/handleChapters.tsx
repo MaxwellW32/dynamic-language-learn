@@ -2,13 +2,13 @@
 import { db } from "@/db"
 import { chapters } from "@/db/schema"
 import { chosenGptModel, openai } from "@/lib/openai"
-import { bookType, chapterSchema, chapterType, characterType, chosenLanguageOptionType, dictionaryJSONType, goalType, interactedLanguageLessonsType, locationType, makeChapterSectionsResponseSchema, makeChapterSectionsResponseType, makeChatMessagesResponseSchema, makeChatMessagesResponseType, newChapterSchema, newChapterType, sectionChatMessageType, sectionType, tableFilterTypes } from "@/types"
+import { bookType, chapterSchema, chapterType, characterType, chosenLanguageOptionType, dictionaryJSONType, goalType, makeGradeInteractiveSubGoalResponseType, interactedLanguageLessonsType, locationType, makeChapterSectionsResponseSchema, makeChapterSectionsResponseType, newChapterSchema, newChapterType, sectionChatMessageType, sectionType, tableFilterTypes, translatableTextType, makeGradeInteractiveSubGoalResponseSchema, makeChatMessagesResponseSchema, makeChatMessagesResponseType } from "@/types"
 import { makeWhereClauses } from "@/utility/utility"
 import { and, asc, eq, SQLWrapper } from "drizzle-orm"
 import { v4 as uuidV4 } from "uuid"
 import { zodTextFormat } from "openai/helpers/zod";
 import { defaultText } from "@/lib/defaultData"
-import { getLatestGoalSubGoal } from "@/utility/contextHelpers"
+import { getLatestGoalSubGoal, makeNativeTargetKey } from "@/utility/contextHelpers"
 
 export async function addChapter(newChapterObj: newChapterType) {
     //validation
@@ -79,24 +79,49 @@ export async function getChapters(filter: tableFilterTypes<chapterType>, getWith
     return results;
 }
 
+function makeNewWordsString(context: contextType) {
+    const seenNativeTargetKey = makeNativeTargetKey(context.nativeLanguage, context.targetLanguage)
+    console.log(`$seenNativeTargetKey`, seenNativeTargetKey);
+
+    const reducedDictObj = Object.fromEntries(Object.entries(context.interactedLanguageLessons[seenNativeTargetKey].dictionary.new).slice(0, 20).map(eachDictionaryEntry => {
+        //reduce to word only
+        eachDictionaryEntry[1] = { word: eachDictionaryEntry[1].word } as dictionaryJSONType["KEY"]
+
+        return eachDictionaryEntry
+    }))
+
+    return `${JSON.stringify(reducedDictObj)}`
+}
+
+type contextType = {
+    nativeLanguage: chosenLanguageOptionType,
+    targetLanguage: chosenLanguageOptionType,
+    storyPremise: bookType["storyPremise"],
+    characters: characterType[],
+    goals: goalType[],
+    locations: locationType[],
+    prevSections: sectionType[],
+    interactedLanguageLessons: interactedLanguageLessonsType,
+    masteryLevel: number
+}
+
+function fixUpTranslatableText(textArr: translatableTextType[], context: contextType) {
+    //assign proper language to chosen words
+    return textArr.map(eachTextArray => {
+        if (typeof eachTextArray === "object") {
+            eachTextArray.languageName = context.targetLanguage.name
+            eachTextArray.languageDialect = context.targetLanguage.dialect === undefined ? null : context.targetLanguage.dialect
+        }
+
+        return eachTextArray
+    })
+}
+
 //gpt
-export async function makeChapterSections({ nativeLanguage, targetLanguage, storyPremise, characters, goals, locations, prevSections, currentChapter, interactedLanguageLessons, masteryLevel }: { nativeLanguage: chosenLanguageOptionType, targetLanguage: chosenLanguageOptionType, storyPremise: bookType["storyPremise"], characters: characterType[], goals: goalType[], locations: locationType[], prevSections: sectionType[], currentChapter: chapterType, interactedLanguageLessons: interactedLanguageLessonsType, masteryLevel: number }): Promise<makeChapterSectionsResponseType> {
-    const newWordsString = Object.entries(interactedLanguageLessons).map(eachEntry => {
-        const eachKey = eachEntry[0] //native/target pair
-        const eachObj = eachEntry[1]
+export async function makeChapterSections({ context, currentChapter }: { context: contextType, currentChapter: chapterType, }): Promise<makeChapterSectionsResponseType> {
+    const newWordsString = makeNewWordsString(context)
 
-        const reducedDictObj = Object.fromEntries(Object.entries(eachObj.dictionary.new).slice(0, 20).map(eachDictionaryEntry => {
-            //reduce words
-            eachDictionaryEntry[1] = { word: eachDictionaryEntry[1].word } as dictionaryJSONType["KEY"]
-
-            return eachDictionaryEntry
-        }))
-
-        return `${eachKey}
-${JSON.stringify(reducedDictObj)}`
-    }).join("\n\n")
-
-    const latestGoalSubGoal = getLatestGoalSubGoal({ goals: goals } as bookType)
+    const latestGoalSubGoal = getLatestGoalSubGoal({ goals: context.goals } as bookType)
     if (latestGoalSubGoal.latestGoal === undefined || latestGoalSubGoal.latestSubGoal === undefined) {
         throw new Error("$no more goals/subGoals")
     }
@@ -111,10 +136,10 @@ LANGUAGE SETTINGS
 ========================
 
 Native Language:
-${JSON.stringify(nativeLanguage)}
+${JSON.stringify(context.nativeLanguage)}
 
 Target Language the user is learning:
-${JSON.stringify(targetLanguage)}
+${JSON.stringify(context.targetLanguage)}
 
 New Words Available:
 ${newWordsString}
@@ -126,9 +151,8 @@ VOCABULARY LEARNING RULES
 Your job is to introduce target-language vocabulary naturally inside the story.
 
 Rules:
-• Select words ONLY from the "New Words Available" list.
-• Never invent or hallucinate word ids.
-• When you use a word, include its original id exactly as provided.
+• if making type "fw" (foreignWord) words select ONLY from the "New Words Available" list. I'll hanlde showing the meaning so ensure you keep the ID. Never invent or hallucinate word ids. When you use a word, include its original id exactly as provided.
+• You can introduce new words on your own as type "gptWord" where you provide the meaning and pronounciation in the users native language and the word itself in the target language. Use if you think a particular word would be useful for the user to know in their target language. Or if masteryLevel is high you can return multiple words in the target language to make a full sentence.
 
 Vocabulary must be introduced naturally within dialogue or narration.
 
@@ -149,7 +173,7 @@ VOCABULARY DIFFICULTY
 
 Choose words according to the user's masteryLevel 
 MasteryLevel:
-${masteryLevel}%.
+${context.masteryLevel}%.
 
 General guidance:
 
@@ -208,7 +232,7 @@ EXPOSITION
 INTERACTIVE
 • Set the stage for an interaction with a character.
 • Introduce the character naturally.
-• Build context and tension for the upcoming dialogue.
+• Build context and tension for the upcoming dialogue. I will handle the interaction myself with a chatroom after your response.
 
 Do NOT resolve the interaction.
 
@@ -324,19 +348,19 @@ STORY CONTEXT
 ========================
 
 Story Premise:
-${JSON.stringify(storyPremise)}
+${JSON.stringify(context.storyPremise)}
 
 Characters:
-${JSON.stringify(characters)}
+${JSON.stringify(context.characters)}
 
 Goals:
-${JSON.stringify(goals)}
+${JSON.stringify(context.goals)}
 
 Locations:
-${JSON.stringify(locations)}
+${JSON.stringify(context.locations)}
 
 Previous Sections:
-${JSON.stringify(prevSections)}`
+${JSON.stringify(context.prevSections)}`
     console.log(`$instructions`, instructions);
 
     const response = await openai.responses.parse({
@@ -361,14 +385,7 @@ ${JSON.stringify(prevSections)}`
         eachSection.id = uuidV4()
 
         //assign proper language to chosen words
-        eachSection.sectionObj.textArr = eachSection.sectionObj.textArr.map(eachTextArray => {
-            if (typeof eachTextArray === "object") {
-                eachTextArray.languageName = targetLanguage.name
-                eachTextArray.languageDialect = targetLanguage.dialect === undefined ? null : targetLanguage.dialect
-            }
-
-            return eachTextArray
-        })
+        eachSection.sectionObj.textArr = fixUpTranslatableText(eachSection.sectionObj.textArr, context)
 
         return eachSection
     })
@@ -376,13 +393,64 @@ ${JSON.stringify(prevSections)}`
     return validatedResponse
 }
 
-export async function makeChatMessagesResponse({ storyPremise, characters, goals, locations, prevSections, prevChatMessages }: { storyPremise: bookType["storyPremise"], characters: characterType[], goals: goalType[], locations: locationType[], prevSections: sectionType[], prevChatMessages: sectionChatMessageType[] }): Promise<makeChatMessagesResponseType> {
+
+
+
+export async function makeChatMessagesResponse({ context, prevChatMessages }: { context: contextType, prevChatMessages: sectionChatMessageType[], }): Promise<makeChatMessagesResponseType> {
+    const newWordsString = makeNewWordsString(context)
+
     const instructions = `You are generating in-world character chat responses in a live conversation.
 This should feel like Character AI (c.ai) — emotionally engaging, immersive, personal.
 
 Your role:
 Continue the conversation ONLY as non-player characters.
 NEVER generate dialogue for the player character (type: "player"). The player is the user.
+
+========================
+LANGUAGE SETTINGS
+========================
+
+Native Language:
+${JSON.stringify(context.nativeLanguage)}
+
+Target Language the user is learning:
+${JSON.stringify(context.targetLanguage)}
+
+New Words Available:
+${newWordsString}
+
+========================
+VOCABULARY LEARNING RULES
+========================
+
+Your job is to introduce target-language vocabulary inside the dialogue if flows naturally.
+
+Rules:
+• if making type "fw" (foreignWord) words select ONLY from the "New Words Available" list. I'll hanlde showing the meaning so ensure you keep the ID. Never invent or hallucinate word ids. When you use a word, include its original id exactly as provided.
+• You can introduce new words on your own as type "gptWord" where you provide the meaning and pronounciation in the users native language and the word itself in the target language. Use if you think a particular word would be useful for the user to know in their target language. Or if masteryLevel is high you can return multiple words in the target language to make a full sentence.
+
+Avoid unnatural usage such as:
+- listing vocabulary
+- repeating the same word excessively.
+
+========================
+VOCABULARY DIFFICULTY
+========================
+
+Choose words according to the user's masteryLevel 
+MasteryLevel:
+${context.masteryLevel}%.
+
+General guidance:
+
+Low mastery:
+- Introduce 1–2 new words
+
+High mastery:
+- Introduce up to 5 words
+- entire sentence usually foreignWords
+
+The story must remain readable for a native speaker of the native language.
 
 CORE BEHAVIOR RULES
 1) Character Authenticity
@@ -432,19 +500,19 @@ CORE BEHAVIOR RULES
 
 WORLD CONTEXT:
 Story Premise:
-${JSON.stringify(storyPremise)}
+${JSON.stringify(context.storyPremise)}
 
 Characters:
-${JSON.stringify(characters)}
+${JSON.stringify(context.characters)}
 
 Goals:
-${JSON.stringify(goals)}
+${JSON.stringify(context.goals)}
 
 Locations:
-${JSON.stringify(locations)}
+${JSON.stringify(context.locations)}
 
 Previous Sections:
-${JSON.stringify(prevSections)}
+${JSON.stringify(context.prevSections)}
 
 Previous Chat Messages:
 ${JSON.stringify(prevChatMessages)}
@@ -467,6 +535,63 @@ Keep responses immersive and character-driven.`,
 
     //validate
     const validatedResponse = makeChatMessagesResponseSchema.parse(response.output_parsed)
+
+    //fix up chat messages
+    validatedResponse.chatMessages = validatedResponse.chatMessages.map(eachChatMessage => {
+        eachChatMessage.messageArr = fixUpTranslatableText(eachChatMessage.messageArr, context)
+
+        return eachChatMessage
+    })
+
+    return validatedResponse
+}
+
+
+
+
+export async function gradeInteractiveSubGoal({ subGoal, characters, prevSections, prevChatMessages }: { subGoal: goalType["subGoals"][number], characters: characterType[], prevSections: sectionType[], prevChatMessages: sectionChatMessageType[], }): Promise<makeGradeInteractiveSubGoalResponseType> {
+    const instructions = `You are evaluating whether the player successfully completed a subGoal during a conversation.
+
+Your task is to determine if the player achieved the subGoal.
+
+Evaluation rules:
+
+1. The player must clearly attempt to achieve the goal.
+2. The target character must logically accept or agree.
+3. The conversation must reach a clear outcome.
+
+If the character would realistically refuse, the goal is NOT complete.
+
+Be faithful to the character's personality and motivations.
+
+Do NOT be generous. Only mark complete if the goal was clearly achieved.
+
+Player = the user.
+
+SubGoal:
+${JSON.stringify(subGoal)}
+
+Characters:
+${JSON.stringify(characters)}
+
+Previous Story Sections:
+${JSON.stringify(prevSections)}
+
+Chat Messages:
+${JSON.stringify(prevChatMessages)}`
+    console.log(`$instructions`, instructions);
+
+    const response = await openai.responses.parse({
+        model: chosenGptModel,
+        instructions: instructions,
+        input: `Determine whether this subGoal was complete or not`,
+        text: {
+            format: zodTextFormat(makeGradeInteractiveSubGoalResponseSchema, "makeGradeInteractiveSubGoalResponse"),
+        },
+    });
+
+    //validate
+    const validatedResponse = makeGradeInteractiveSubGoalResponseSchema.parse(response.output_parsed)
 
     return validatedResponse
 }

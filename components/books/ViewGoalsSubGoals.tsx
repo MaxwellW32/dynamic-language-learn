@@ -17,7 +17,7 @@ export default function ViewGoalsSubGoals({ book }: { book: bookType }) {
     const foundAreaForSubGoal = useMemo<areaType | undefined>(() => {
         if (activeSubGoal === undefined) return undefined
 
-        if (activeSubGoal.subGoalTypeObj.type !== "area") return undefined
+        if (activeSubGoal.subGoalTypeObj.type !== "exposition" || activeSubGoal.subGoalTypeObj.areaId === null) return undefined
 
         return findArea(book.locations, activeSubGoal.subGoalTypeObj.areaId)
 
@@ -71,19 +71,16 @@ export default function ViewGoalsSubGoals({ book }: { book: bookType }) {
                 <>
                     {activeSubGoal !== undefined && (
                         <>
-                            {activeSubGoal.subGoalTypeObj.type === "area" && (
-                                <div>
-                                    <b>Visit:</b>
-                                    <p>
-                                        {foundAreaForSubGoal !== undefined
-                                            ? foundAreaForSubGoal.name
-                                            : "Area not found."}
-                                    </p>
-                                </div>
-                            )}
-
                             {activeSubGoal.subGoalTypeObj.type === "exposition" && (
-                                null
+                                <div>
+                                    <p>Load more exposition</p>
+
+                                    {foundAreaForSubGoal !== undefined && (
+                                        <>
+                                            <p><b>area:</b> {foundAreaForSubGoal.name}</p>
+                                        </>
+                                    )}
+                                </div>
                             )}
 
                             {activeSubGoal.subGoalTypeObj.type === "defeat-character" && (

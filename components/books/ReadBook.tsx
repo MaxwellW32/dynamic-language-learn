@@ -1,6 +1,6 @@
 "use client"
 import styles from "./style.module.css"
-import { areaType, bookSchema, bookType, characterType, dictionaryJSONType, gptApiFunctionCallOptionType, grammarJSONType, interactedLanguageLessonsType, languageLessonType, locationType, makeCharactersBodySchema, makeCharactersBodyType, makeCharactersResponseSchema, makeGoalsBodySchema, makeGoalsBodyType, makeGoalsResponseSchema, makeLocationsBodySchema, makeLocationsBodyType, makeLocationsResponseSchema, makeStoryPremiseBodySchema, makeStoryPremiseBodyType, makeStoryPremiseResponseSchema, placeType, promptInfoType, userSchema, userType } from '@/types'
+import { areaType, bookSchema, bookType, characterType, createSubGoalPropsType, dictionaryJSONType, gptApiFunctionCallOptionType, grammarJSONType, interactedLanguageLessonsType, languageLessonType, locationType, makeCharactersBodySchema, makeCharactersBodyType, makeCharactersResponseSchema, makeGoalsBodySchema, makeGoalsBodyType, makeGoalsResponseSchema, makeGoalsResponseType, makeLocationsBodySchema, makeLocationsBodyType, makeLocationsResponseSchema, makeStoryPremiseBodySchema, makeStoryPremiseBodyType, makeStoryPremiseResponseSchema, placeType, promptInfoType, userSchema, userType } from '@/types'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import ShowMore from '../showMore/ShowMore'
 import EditPromptInfo from '../promptInfo/EditPromptInfo'
@@ -14,8 +14,9 @@ import ViewChapters from "../chapters/ViewChapters"
 import ViewLocations from "./ViewLocations"
 import ViewGoalsSubGoals from "./ViewGoalsSubGoals"
 import { defaultText } from "@/lib/defaultData"
-import { getAreaFromId, getCharacterFromId, makeNativeTargetKey } from "@/utility/contextHelpers"
+import { chooseRandomTargetLanguage, getAreaFromId, getCharacterFromId, getRelevantGoals, makeNativeTargetKey } from "@/utility/contextHelpers"
 import { updateUser } from "@/serverFunctions/handleUsers"
+import { v4 } from "uuid"
 
 export default function ReadBook({ seenUser, seenBook }: { seenUser: userType, seenBook: bookType }) {
     const { rateLimit: makeLocationPlacesRateLimit } = UseRateLimit({})
@@ -96,7 +97,6 @@ export default function ReadBook({ seenUser, seenBook }: { seenUser: userType, s
                 }
             }
         })
-        console.log(`$newInteractedLanguageLessons`, newInteractedLanguageLessons)
 
         return newInteractedLanguageLessons
     }, [user.lessonProgress, languageLessons])
@@ -309,6 +309,48 @@ The premise should feel like the opening description of an epic interactive adve
         }
     }, [])
 
+    //mark goal completions
+    useEffect(() => {
+        if (book.goals.length === 0) return
+
+        //update exposition subGoal
+        book.goals.forEach(eachGoal => {
+            //if all subGoals complete mark goal as complete
+            let allSubGoalsComplete = true
+
+            eachGoal.subGoals.forEach(eachSubGoal => {
+                if (!eachSubGoal.complete) {
+                    allSubGoalsComplete = false
+                }
+            })
+
+            //only run once
+            if (allSubGoalsComplete && !eachGoal.complete) {
+                //update just that goal
+                bookSet(prevBook => {
+                    const newBook = { ...prevBook }
+
+                    newBook.goals = newBook.goals.map(eachGoalMap => {
+                        //react
+                        eachGoalMap = { ...eachGoalMap }
+
+                        if (eachGoalMap.id === eachGoal.id) {
+                            eachGoalMap.complete = true
+
+                            //send to server
+                            syncBookToServerKeysSet(["goals"])
+                        }
+
+                        return eachGoalMap
+                    })
+
+                    return newBook
+                })
+            }
+        })
+
+    }, [book.goals])
+
     //validation functions
     function checkTargetLanguagesValid() {
         return book.targetLanguages.length > 0
@@ -446,6 +488,93 @@ The premise should feel like the opening description of an epic interactive adve
             }
 
             return false
+        }
+    }
+
+    //make subGoals
+    async function createSubGoals(createSubGoalProps: createSubGoalPropsType) {
+        try {
+            toast.success("making new subGoals!")
+
+            //what function to call
+            const gptApiFunctionCallOption: gptApiFunctionCallOptionType = "makeGoals"
+
+            const relevantGoals = getRelevantGoals(book, 3, 7)
+
+            //make body
+            const newBody: makeGoalsBodyType = {
+                option: "subGoals",
+                storyPremise: book.storyPremise,
+                prevGoals: [],//don't need
+                characters: book.characters,
+                locations: book.locations,
+                forSubGoal: {
+                    relevantGoals: relevantGoals,
+                    forFailedSubGoal: createSubGoalProps.failedSubGoalId === undefined ? undefined : {
+                        subGoalId: createSubGoalProps.failedSubGoalId
+                    }
+                }
+            }
+            const validatedBody = makeGoalsBodySchema.parse(newBody)
+
+            //send off to gpt api
+            const response = await fetch(`/api/gptConcurrent?functionCallOption=${gptApiFunctionCallOption}`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(validatedBody)
+            })
+            //handle response
+            const seenResponse = await response.json()
+            const validatedResponse = makeGoalsResponseSchema.parse(seenResponse)
+            console.log(`$validatedResponse`, validatedResponse);
+
+            if (validatedResponse.results.type !== "subGoal") return
+
+            //asign change locally
+            bookSet(prevBook => {
+                const newBook = { ...prevBook }
+
+                newBook.goals = newBook.goals.map(eachGoal => {
+                    if (validatedResponse.results.type !== "subGoal") return eachGoal
+
+                    if (eachGoal.id === createSubGoalProps.goalId) {
+                        //react
+                        eachGoal = { ...eachGoal }
+
+                        if (createSubGoalProps.failedSubGoalId === undefined) {
+                            //for regular add on
+                            eachGoal.subGoals = [...eachGoal.subGoals, ...validatedResponse.results.subGoals]
+
+                        } else {
+                            //find that subGoalId
+                            //add new after it
+                            const foundIndex = eachGoal.subGoals.findIndex(eachSubGoal => eachSubGoal.id === createSubGoalProps.failedSubGoalId)
+                            if (foundIndex < 0) return eachGoal
+
+                            const prevArr = [...eachGoal.subGoals].slice(0, foundIndex + 1)//include failed item
+                            const newArr = [...prevArr, ...validatedResponse.results.subGoals]
+
+                            //add on new array
+                            eachGoal.subGoals = newArr
+                        }
+                    }
+
+                    return eachGoal
+                })
+
+                return newBook
+            })
+
+            //sync to server
+            syncBookToServerKeysSet(["goals"])
+
+            //check if valid
+            checkGoalsValid(false)
+
+        } catch (error) {
+            consoleAndToastError(error)
         }
     }
 
@@ -1100,6 +1229,7 @@ The premise should feel like the opening description of an epic interactive adve
 
                                             //make body
                                             const newBody: makeGoalsBodyType = {
+                                                option: "goals",
                                                 storyPremise: book.storyPremise,
                                                 prevGoals: book.goals,
                                                 characters: book.characters,
@@ -1121,11 +1251,14 @@ The premise should feel like the opening description of an epic interactive adve
                                             const validatedResponse = makeGoalsResponseSchema.parse(seenResponse)
                                             console.log(`$validatedResponse`, validatedResponse);
 
+                                            if (validatedResponse.results.type !== "goal") return
+
                                             //asign change locally
                                             bookSet(prevBook => {
                                                 const newBook = { ...prevBook }
+                                                if (validatedResponse.results.type !== "goal") return prevBook
 
-                                                newBook.goals = [...newBook.goals, ...validatedResponse.goals]
+                                                newBook.goals = [...newBook.goals, ...validatedResponse.results.goals]
 
                                                 return newBook
                                             })
@@ -1323,7 +1456,7 @@ The premise should feel like the opening description of an epic interactive adve
 
                     <div className={styles.readingAreaContainer} style={{ gridTemplateColumns: showingSideMenu ? "1fr 300px" : "1fr" }}>
                         <div className={styles.readingArea}>
-                            <ViewChapters user={user} userSet={userSet} book={book} bookSet={bookSet} syncUserToServerKeysSet={syncUserToServerKeysSet} syncBookToServerKeysSet={syncBookToServerKeysSet} interactedLanguageLessons={sortedLanguageLessons} languageLessons={languageLessons} />
+                            <ViewChapters user={user} userSet={userSet} book={book} bookSet={bookSet} syncUserToServerKeysSet={syncUserToServerKeysSet} syncBookToServerKeysSet={syncBookToServerKeysSet} interactedLanguageLessons={sortedLanguageLessons} languageLessons={languageLessons} createSubGoals={createSubGoals} />
                         </div>
 
                         <div className={styles.sideMenu} style={{ display: showingSideMenu ? "" : "none" }}>

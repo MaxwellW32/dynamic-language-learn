@@ -1,20 +1,20 @@
 "use client"
 import { addChapter, getChapters, getSpecificChapter, makeChapterSections, updateChapter } from '@/serverFunctions/handleChapters'
-import { bookType, changeMasteryPropsType, chapterSchema, chapterType, characterType, dictionaryJSONType, goalType, interactedLanguageLessonsType, languageLessonType, locationType, newChapterType, sectionType, userType } from '@/types'
+import { bookType, changeMasteryPropsType, chapterSchema, chapterType, characterType, createSubGoalPropsType, dictionaryJSONType, goalType, interactedLanguageLessonsType, languageLessonType, locationType, newChapterType, sectionType, userType } from '@/types'
 import { consoleAndToastError } from '@/utility/consoleErrorWithToast'
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { v4 as uuidV4 } from 'uuid'
 import ShowMore from '../showMore/ShowMore'
 import ViewChatSection from './ViewChatSection'
-import { ensurePlayer, getImportantCharacters, getImportantLocations, getLatestGoalSubGoal, getRelevantGoals, getRelevantSections } from '@/utility/contextHelpers'
+import { chooseRandomTargetLanguage, ensurePlayer, getImportantCharacters, getImportantLocations, getLatestGoalSubGoal, getRelevantGoals, getRelevantSections } from '@/utility/contextHelpers'
 import { useAtom } from 'jotai'
 import { defaultText } from '@/lib/defaultData'
 import DisplayTranslatableTexts from './DisplayTranslatableTexts'
 
 type makeNewChapterPropsType = { chapterStarter: Partial<chapterType>, sections: sectionType[], notify: boolean }
 
-export default function ViewChapters({ user, userSet, book, bookSet, syncUserToServerKeysSet, syncBookToServerKeysSet, interactedLanguageLessons, languageLessons }: { user: userType, userSet: React.Dispatch<React.SetStateAction<userType>>, book: bookType, bookSet: React.Dispatch<React.SetStateAction<bookType>>, syncUserToServerKeysSet: React.Dispatch<React.SetStateAction<(keyof userType)[] | undefined>>, syncBookToServerKeysSet: React.Dispatch<React.SetStateAction<(keyof bookType)[] | undefined>>, interactedLanguageLessons: interactedLanguageLessonsType, languageLessons: { [key: string]: languageLessonType } }) {
+export default function ViewChapters({ user, userSet, book, bookSet, syncUserToServerKeysSet, syncBookToServerKeysSet, interactedLanguageLessons, languageLessons, createSubGoals }: { user: userType, userSet: React.Dispatch<React.SetStateAction<userType>>, book: bookType, bookSet: React.Dispatch<React.SetStateAction<bookType>>, syncUserToServerKeysSet: React.Dispatch<React.SetStateAction<(keyof userType)[] | undefined>>, syncBookToServerKeysSet: React.Dispatch<React.SetStateAction<(keyof bookType)[] | undefined>>, interactedLanguageLessons: interactedLanguageLessonsType, languageLessons: { [key: string]: languageLessonType }, createSubGoals(createSubGoalProps: createSubGoalPropsType): Promise<void> }) {
     const [chapters, chaptersSet] = useState<chapterType[] | undefined>(undefined)
 
     //get chapters
@@ -88,7 +88,7 @@ export default function ViewChapters({ user, userSet, book, bookSet, syncUserToS
                 <>
                     {chapters.map(eachChapter => {
                         return (
-                            <ViewChapter key={eachChapter.id} user={user} userSet={userSet} eachChapter={eachChapter} chapters={chapters} book={book} bookSet={bookSet} syncUserToServerKeysSet={syncUserToServerKeysSet} syncBookToServerKeysSet={syncBookToServerKeysSet} interactedLanguageLessons={interactedLanguageLessons} languageLessons={languageLessons}
+                            <ViewChapter key={eachChapter.id} user={user} userSet={userSet} eachChapter={eachChapter} chapters={chapters} book={book} bookSet={bookSet} syncUserToServerKeysSet={syncUserToServerKeysSet} syncBookToServerKeysSet={syncBookToServerKeysSet} interactedLanguageLessons={interactedLanguageLessons} languageLessons={languageLessons} createSubGoals={createSubGoals}
                                 chapterUpdater={(updatedChapter) => {
                                     //local change
                                     chaptersSet(prevChapters => {
@@ -127,9 +127,13 @@ export default function ViewChapters({ user, userSet, book, bookSet, syncUserToS
     )
 }
 
-function ViewChapter({ user, userSet, eachChapter, chapters, chapterUpdater, book, bookSet, syncUserToServerKeysSet, syncBookToServerKeysSet, makeNewChapter, interactedLanguageLessons, languageLessons }: { user: userType, userSet: React.Dispatch<React.SetStateAction<userType>>, eachChapter: chapterType, chapters: chapterType[], chapterUpdater: (chapter: chapterType) => void, book: bookType, bookSet: React.Dispatch<React.SetStateAction<bookType>>, syncUserToServerKeysSet: React.Dispatch<React.SetStateAction<(keyof userType)[] | undefined>>, syncBookToServerKeysSet: React.Dispatch<React.SetStateAction<(keyof bookType)[] | undefined>>, makeNewChapter(makeNewChapterProps: makeNewChapterPropsType): Promise<void>, interactedLanguageLessons: interactedLanguageLessonsType, languageLessons: { [key: string]: languageLessonType } }) {
+function ViewChapter({ user, userSet, eachChapter, chapters, chapterUpdater, book, bookSet, syncUserToServerKeysSet, syncBookToServerKeysSet, makeNewChapter, interactedLanguageLessons, languageLessons, createSubGoals }: { user: userType, userSet: React.Dispatch<React.SetStateAction<userType>>, eachChapter: chapterType, chapters: chapterType[], chapterUpdater: (chapter: chapterType) => void, book: bookType, bookSet: React.Dispatch<React.SetStateAction<bookType>>, syncUserToServerKeysSet: React.Dispatch<React.SetStateAction<(keyof userType)[] | undefined>>, syncBookToServerKeysSet: React.Dispatch<React.SetStateAction<(keyof bookType)[] | undefined>>, makeNewChapter(makeNewChapterProps: makeNewChapterPropsType): Promise<void>, interactedLanguageLessons: interactedLanguageLessonsType, languageLessons: { [key: string]: languageLessonType }, createSubGoals(createSubGoalProps: createSubGoalPropsType): Promise<void> }) {
     const [syncChapterToServerKeys, syncChapterToServerKeysSet] = useState<(keyof chapterType)[] | undefined>(undefined)
     const syncChapterToServerDebounce = useRef<{ [key: string]: NodeJS.Timeout | undefined }>({})
+
+    const charactersInArea = useMemo(() => {
+        return getImportantCharacters(book, false)
+    }, [book.characters])
 
     //sync chapter to server
     useEffect(() => {
@@ -226,20 +230,22 @@ function ViewChapter({ user, userSet, eachChapter, chapters, chapterUpdater, boo
 
 
             //choose one target language at random
-            const targetLanguageToGenerate = book.targetLanguages[Math.floor(Math.random() * book.targetLanguages.length)]
+            const targetLanguageToGenerate = chooseRandomTargetLanguage(book)
 
             //get response
             const newSectionResponse = await makeChapterSections({
-                storyPremise: seenStoryPremise,
-                characters: importantCharacters,
-                locations: relevantLocations,
-                goals: relevantGoals,
-                prevSections: prevSections,
+                context: {
+                    storyPremise: seenStoryPremise,
+                    characters: importantCharacters,
+                    locations: relevantLocations,
+                    goals: relevantGoals,
+                    prevSections: prevSections,
+                    nativeLanguage: user.languageSettings.native,
+                    targetLanguage: targetLanguageToGenerate,
+                    interactedLanguageLessons: interactedLanguageLessons,
+                    masteryLevel: 0,
+                },
                 currentChapter: eachChapter,
-                nativeLanguage: user.languageSettings.native,
-                targetLanguage: targetLanguageToGenerate,
-                interactedLanguageLessons: interactedLanguageLessons,
-                masteryLevel: 0,
             })
             console.log(`$newSectionResponse`, newSectionResponse)
 
@@ -248,7 +254,7 @@ function ViewChapter({ user, userSet, eachChapter, chapters, chapterUpdater, boo
 
             const sectionsToAdd: sectionType[] = newSectionResponse.sections
 
-            //update goals/subGoals for expositions
+            //update exposition subGoal
             bookSet(prevBook => {
                 const newBook = { ...prevBook }
 
@@ -268,17 +274,6 @@ function ViewChapter({ user, userSet, eachChapter, chapters, chapterUpdater, boo
 
                             return eachSubGoal
                         })
-
-                        //if all subGoals complete mark goal as complete
-                        let allSubGoalsComplete = true
-                        eachGoal.subGoals.map(eachSubGoal => {
-                            if (!eachSubGoal.complete) {
-                                allSubGoalsComplete = false
-                            }
-                        })
-                        if (allSubGoalsComplete) {
-                            eachGoal.complete = true
-                        }
                     }
 
                     return eachGoal
@@ -549,7 +544,13 @@ function ViewChapter({ user, userSet, eachChapter, chapters, chapterUpdater, boo
 
                         {eachSection.sectionObj.type === "chat" && (
                             <>
-                                <ViewChatSection user={user} seenSectionId={eachSection.id} chatSection={eachSection.sectionObj} book={book} eachChapter={eachChapter} chapters={chapters} chapterUpdater={chapterUpdater} syncChapterToServerKeysSet={syncChapterToServerKeysSet} languageLessons={languageLessons} />
+                                <ViewChatSection user={user} seenSectionId={eachSection.id} chatSection={eachSection.sectionObj} book={book} bookSet={bookSet} eachChapter={eachChapter} chapters={chapters} chapterUpdater={chapterUpdater} syncChapterToServerKeysSet={syncChapterToServerKeysSet} interactedLanguageLessons={interactedLanguageLessons} languageLessons={languageLessons} changeMastery={changeMastery} syncBookToServerKeysSet={syncBookToServerKeysSet} createSubGoals={createSubGoals} />
+                            </>
+                        )}
+
+                        {eachSection.sectionObj.type === "gameMode" && (
+                            <>
+                                <p>gameMode</p>
                             </>
                         )}
                     </div>
@@ -559,6 +560,35 @@ function ViewChapter({ user, userSet, eachChapter, chapters, chapterUpdater, boo
             <button className='button2' style={{ justifySelf: "center" }}
                 onClick={() => { addSectionFunc() }}
             >Add section</button>
+
+            {charactersInArea.length > 0 && eachChapter.sections[eachChapter.sections.length - 1].sectionObj.type !== "chat" && (//characters in area, and last section is not a chat room
+                <button className='button2' style={{ justifySelf: "flex-end" }}
+                    onClick={() => {
+                        const updatedLocalChapter = { ...eachChapter }
+
+                        //get all characters
+                        const importantCharacters = getImportantCharacters(book)
+
+                        const newChatSection: sectionType = {
+                            id: uuidV4(),
+                            sectionObj: {
+                                type: "chat",
+                                characterIds: importantCharacters.map(each => each.id),
+                                interactiveSubGoalId: null,
+                                messages: [],
+                            }
+                        }
+
+                        updatedLocalChapter.sections = [...updatedLocalChapter.sections, newChatSection]
+
+                        //send off
+                        chapterUpdater(updatedLocalChapter)
+
+                        //server chapter sync
+                        syncChapterToServerKeysSet(["sections"])
+                    }}
+                >Chat</button>
+            )}
         </div>
     )
 }

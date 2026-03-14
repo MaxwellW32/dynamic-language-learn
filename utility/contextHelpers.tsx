@@ -4,7 +4,11 @@ export function makeNativeTargetKey(native: chosenLanguageOptionType, target: ch
     return `${native.name.toLowerCase()}${native.dialect !== undefined ? `(${native.dialect.toLowerCase()})` : ""}__${target.name.toLowerCase()}${target.dialect !== undefined ? `(${target.dialect.toLowerCase()})` : ""}`
 }
 
-export function getImportantCharacters(book: bookType) {
+export function chooseRandomTargetLanguage(book: bookType) {
+    return book.targetLanguages[Math.floor(Math.random() * book.targetLanguages.length)]
+}
+
+export function getImportantCharacters(book: bookType, includingPlayer = true) {
     const importantCharacters: characterType[] = []
 
     //get player
@@ -12,8 +16,10 @@ export function getImportantCharacters(book: bookType) {
     if (foundPlayer === undefined) throw new Error("not seeing player")
     if (foundPlayer.locationObj.type === "withPlayer") throw new Error("player location can't be 'with player'")
 
-    //add player
-    importantCharacters.push(foundPlayer)
+    if (includingPlayer) {
+        //add player
+        importantCharacters.push(foundPlayer)
+    }
 
     //add companions
     const charactersWithPlayer = book.characters.filter(eachCharacter => eachCharacter.locationObj.type === "withPlayer")
@@ -127,7 +133,6 @@ export function getRelevantGoals(book: bookType, goalLimit: number, subGoalLimit
 
     return relevantGoals
 }
-
 export function getRelevantSections(eachChapter: chapterType, chapters: chapterType[], MAX: number) {
     // 1. Get current chapter sections (up to 3)
     const currentSections = eachChapter.sections.slice(-MAX);
