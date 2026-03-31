@@ -16,29 +16,34 @@ type makeNewChapterPropsType = { chapterStarter: Partial<chapterType>, sections:
 
 export default function ViewChapters({ user, userSet, book, bookSet, syncUserToServerKeysSet, syncBookToServerKeysSet, interactedLanguageLessons, languageLessons, createSubGoals }: { user: userType, userSet: React.Dispatch<React.SetStateAction<userType>>, book: bookType, bookSet: React.Dispatch<React.SetStateAction<bookType>>, syncUserToServerKeysSet: React.Dispatch<React.SetStateAction<(keyof userType)[] | undefined>>, syncBookToServerKeysSet: React.Dispatch<React.SetStateAction<(keyof bookType)[] | undefined>>, interactedLanguageLessons: interactedLanguageLessonsType, languageLessons: { [key: string]: languageLessonType }, createSubGoals(createSubGoalProps: createSubGoalPropsType): Promise<void> }) {
     const [chapters, chaptersSet] = useState<chapterType[] | undefined>(undefined)
+    const [activeChapterId, activeChapterIdSet] = useState<chapterType["id"] | undefined>(undefined)
 
     //get chapters
     useEffect(() => {
         const search = async () => {
             try {
+                async function getChapFunc() {
+                    const seenChapters = await getChapters({ bookId: book.id })
+
+                    return seenChapters
+                }
+
                 //get chapter/chapters
                 if (book.currentChapterId === "") {
-                    const seenChapters = await getChapters({ bookId: book.id })
-                    chaptersSet(seenChapters)
+                    chaptersSet(await getChapFunc())
 
                 } else {
                     let seenChapter = await getSpecificChapter(book.currentChapterId)
+
                     if (seenChapter === undefined) {
                         console.log(`$not seeing specific chapter`)
 
                         //again bulk search
-                        const seenChapters = await getChapters({ bookId: book.id })
-                        chaptersSet(seenChapters)
+                        chaptersSet(await getChapFunc())
 
-                        return
+                    } else {
+                        chaptersSet([seenChapter])
                     }
-
-                    chaptersSet([seenChapter])
                 }
 
             } catch (error) {
@@ -84,6 +89,10 @@ export default function ViewChapters({ user, userSet, book, bookSet, syncUserToS
 
     return (
         <div className='simpleGrid' style={{ padding: "var(--spacingR)", backgroundColor: "var(--c2)", justifyItems: "center" }}>
+            <div>
+
+            </div>
+
             {chapters !== undefined && (
                 <>
                     {chapters.map(eachChapter => {

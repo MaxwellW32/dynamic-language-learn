@@ -18,3 +18,19 @@
 //
 //
 //Ideas
+//world feel
+////better location generation
+////memory level generation and saving
+////
+////
+////
+//gameplay
+////Generate text
+////Get back new words
+////Spawn game modes
+////Improve
+//
+//
+//
+//
+//

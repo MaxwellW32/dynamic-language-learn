@@ -8,7 +8,6 @@
 .readingArea {
     display: grid;
     overflow: auto;
-    /* background-color: red; */
     align-content: flex-start;
 }
 
