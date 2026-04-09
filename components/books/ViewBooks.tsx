@@ -6,7 +6,7 @@ export default function ViewBooks({ books }: { books: bookType[] }) {
         <div className='gridColumn snap'>
             {books.map(eachBook => {
                 return (
-                    <div key={eachBook.id} className='simpleContainer'>
+                    <div key={eachBook.id} className='simpleContainer1'>
                         <h3>{eachBook.name}</h3>
 
                         <Link href={`books/read/${eachBook.id}/${eachBook.name}`}>

@@ -17,6 +17,15 @@ type makeNewChapterPropsType = { chapterStarter: Partial<chapterType>, sections:
 export default function ViewChapters({ user, userSet, book, bookSet, syncUserToServerKeysSet, syncBookToServerKeysSet, interactedLanguageLessons, languageLessons, createSubGoals }: { user: userType, userSet: React.Dispatch<React.SetStateAction<userType>>, book: bookType, bookSet: React.Dispatch<React.SetStateAction<bookType>>, syncUserToServerKeysSet: React.Dispatch<React.SetStateAction<(keyof userType)[] | undefined>>, syncBookToServerKeysSet: React.Dispatch<React.SetStateAction<(keyof bookType)[] | undefined>>, interactedLanguageLessons: interactedLanguageLessonsType, languageLessons: { [key: string]: languageLessonType }, createSubGoals(createSubGoalProps: createSubGoalPropsType): Promise<void> }) {
     const [chapters, chaptersSet] = useState<chapterType[] | undefined>(undefined)
     const [activeChapterId, activeChapterIdSet] = useState<chapterType["id"] | undefined>(undefined)
+    const activeChapter = useMemo<chapterType | undefined>(() => {
+        if (chapters === undefined) return undefined
+
+        return chapters.find(eachChapter => eachChapter.id === activeChapterId)
+    }, [activeChapterId, chapters])
+
+    //runs once
+    //sets active chapter id once
+    //rest can be from button click
 
     //get chapters
     useEffect(() => {
@@ -36,7 +45,7 @@ export default function ViewChapters({ user, userSet, book, bookSet, syncUserToS
                     let seenChapter = await getSpecificChapter(book.currentChapterId)
 
                     if (seenChapter === undefined) {
-                        console.log(`$not seeing specific chapter`)
+                        toast.error(`not seeing specific chapter`)
 
                         //again bulk search
                         chaptersSet(await getChapFunc())
@@ -53,6 +62,27 @@ export default function ViewChapters({ user, userSet, book, bookSet, syncUserToS
         search()
 
     }, [])
+
+    //set activeChapterId once
+    useEffect(() => {
+        if (activeChapterId === undefined && chapters !== undefined && chapters.length > 0) {
+            activeChapterIdSet(chapters[0].id)
+
+            //update currentChapterId on book
+            bookSet(prevBook => {
+                const newBook = { ...prevBook }
+                if (activeChapterId === undefined) return prevBook
+
+                newBook.currentChapterId = activeChapterId
+
+                return newBook
+            })
+
+            //send up to server
+            syncBookToServerKeysSet(["currentChapterId"])
+        }
+
+    }, [activeChapterId, chapters])
 
     //make new chapter
     async function makeNewChapter(makeNewChapterProps: makeNewChapterPropsType) {
@@ -88,48 +118,42 @@ export default function ViewChapters({ user, userSet, book, bookSet, syncUserToS
     }
 
     return (
-        <div className='simpleGrid' style={{ padding: "var(--spacingR)", backgroundColor: "var(--c2)", justifyItems: "center" }}>
-            <div>
-
-            </div>
-
-            {chapters !== undefined && (
+        <div className='simpleContainer2' style={{ backgroundColor: "var(--c2)" }}>
+            {chapters !== undefined && chapters.length === 0 && (
                 <>
-                    {chapters.map(eachChapter => {
-                        return (
-                            <ViewChapter key={eachChapter.id} user={user} userSet={userSet} eachChapter={eachChapter} chapters={chapters} book={book} bookSet={bookSet} syncUserToServerKeysSet={syncUserToServerKeysSet} syncBookToServerKeysSet={syncBookToServerKeysSet} interactedLanguageLessons={interactedLanguageLessons} languageLessons={languageLessons} createSubGoals={createSubGoals}
-                                chapterUpdater={(updatedChapter) => {
-                                    //local change
-                                    chaptersSet(prevChapters => {
-                                        if (prevChapters === undefined) return undefined
+                    <button className='button2' style={{ justifySelf: "flex-end" }}
+                        onClick={() => {
+                            makeNewChapter({
+                                chapterStarter: {},
+                                sections: [],
+                                notify: true
+                            })
+                        }}
+                    >Add chapter</button>
+                </>
+            )}
 
-                                        const newChapters = prevChapters.map(eachChapterMap => {
-                                            if (eachChapterMap.id === updatedChapter.id) {
-                                                return { ...updatedChapter }
-                                            }
+            {activeChapter !== undefined && chapters !== undefined && (
+                <>
+                    <ViewChapter key={activeChapter.id} user={user} userSet={userSet} eachChapter={activeChapter} chapters={chapters} book={book} bookSet={bookSet} syncUserToServerKeysSet={syncUserToServerKeysSet} syncBookToServerKeysSet={syncBookToServerKeysSet} interactedLanguageLessons={interactedLanguageLessons} languageLessons={languageLessons} createSubGoals={createSubGoals}
+                        chapterUpdater={(updatedChapter) => {
+                            //local change
+                            chaptersSet(prevChapters => {
+                                if (prevChapters === undefined) return undefined
 
-                                            return eachChapterMap
-                                        })
+                                const newChapters = prevChapters.map(eachChapterMap => {
+                                    if (eachChapterMap.id === updatedChapter.id) {
+                                        return { ...updatedChapter }
+                                    }
 
-                                        return newChapters
-                                    })
-                                }}
-                                makeNewChapter={makeNewChapter}
-                            />
-                        )
-                    })}
-
-                    {chapters.length === 0 && (
-                        <button className='button2' style={{ justifySelf: "flex-end" }}
-                            onClick={() => {
-                                makeNewChapter({
-                                    chapterStarter: {},
-                                    sections: [],
-                                    notify: true
+                                    return eachChapterMap
                                 })
-                            }}
-                        >Add chapter</button>
-                    )}
+
+                                return newChapters
+                            })
+                        }}
+                        makeNewChapter={makeNewChapter}
+                    />
                 </>
             )}
         </div>
@@ -565,7 +589,7 @@ function ViewChapter({ user, userSet, eachChapter, chapters, chapterUpdater, boo
 
             {eachChapter.sections.map(eachSection => {
                 return (
-                    <div key={eachSection.id} className='simpleContainer'>
+                    <div key={eachSection.id} className='simpleContainer1'>
                         {eachSection.sectionObj.type === "exposition" && (
                             <>
                                 <DisplayTranslatableTexts user={user} translatableTexts={eachSection.sectionObj.textArr} languageLessons={languageLessons} changeMastery={changeMastery} />

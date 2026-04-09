@@ -966,7 +966,7 @@ The premise should feel like the opening description of an epic interactive adve
 
                                 {book.locations.map(eachLocation => {
                                     return (
-                                        <div key={eachLocation.id} className='simpleContainer'>
+                                        <div key={eachLocation.id} className='simpleContainer1'>
                                             <h3>{eachLocation.name}</h3>
 
                                             <b>Places:</b>
@@ -978,7 +978,7 @@ The premise should feel like the opening description of an epic interactive adve
 
                                                 {eachLocation.places.map(eachPlace => {
                                                     return (
-                                                        <div key={eachPlace.id} className='simpleContainer'>
+                                                        <div key={eachPlace.id} className='simpleContainer1'>
                                                             <h3>{eachPlace.name}</h3>
 
                                                             <b>Areas:</b>
@@ -990,7 +990,7 @@ The premise should feel like the opening description of an epic interactive adve
 
                                                                 {eachPlace.areas.map(eachArea => {
                                                                     return (
-                                                                        <div key={eachArea.id} className='simpleContainer'>
+                                                                        <div key={eachArea.id} className='simpleContainer1'>
                                                                             <h3>{eachArea.name}</h3>
                                                                         </div>
                                                                     )
@@ -1094,7 +1094,7 @@ The premise should feel like the opening description of an epic interactive adve
                                     }
 
                                     return (
-                                        <div key={eachCharacter.id} className='simpleContainer'>
+                                        <div key={eachCharacter.id} className='simpleContainer1'>
                                             <h3>{eachCharacter.name}</h3>
 
                                             <p>{eachCharacter.type}</p>
@@ -1286,7 +1286,7 @@ The premise should feel like the opening description of an epic interactive adve
 
                                 {book.goals.map((eachGoal) => {
                                     return (
-                                        <div key={eachGoal.id} className='simpleContainer'>
+                                        <div key={eachGoal.id} className='simpleContainer1'>
                                             <h3 style={{ position: "relative" }}>
                                                 {eachGoal.title}
 
@@ -1321,7 +1321,7 @@ The premise should feel like the opening description of an epic interactive adve
                                                     }
 
                                                     return (
-                                                        <div key={eachSubGoal.id} className='simpleContainer'>
+                                                        <div key={eachSubGoal.id} className='simpleContainer1'>
                                                             <h3 style={{ position: "relative" }}>
                                                                 {eachSubGoal.title}
 

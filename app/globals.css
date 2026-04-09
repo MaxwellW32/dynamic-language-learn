@@ -273,13 +273,20 @@ input[type="checkbox"] {
   flex-wrap: wrap;
 }
 
-.simpleContainer {
+.simpleContainer1 {
   display: grid;
   align-content: flex-start;
   gap: var(--spacingR);
   padding: var(--spacingR);
   border: 1px solid var(--shade1);
   border-radius: var(--borderRadiusR);
+}
+
+.simpleContainer2 {
+  display: grid;
+  align-content: flex-start;
+  gap: var(--spacingR);
+  padding: var(--spacingR);
 }
 
 .simpleGrid {
@@ -296,17 +303,7 @@ input[type="checkbox"] {
   overflow: auto;
 }
 
-
-
-
 .errorText {
   color: var(--c5);
   font-size: var(--fontSizeS);
-}
-
-
-
-
-.highlight {
-  background-color: red !important;
 }
