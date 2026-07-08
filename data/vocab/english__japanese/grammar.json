@@ -1,0 +1,162 @@
+{
+    "1": {
+        "title": "A は B です",
+        "description": "Basic sentence structure meaning 'A is B'. Example: 私は学生です (I am a student)."
+    },
+    "2": {
+        "title": "A は B じゃないです",
+        "description": "Negative form meaning 'A is not B'. Example: 私は先生じゃないです (I am not a teacher)."
+    },
+    "3": {
+        "title": "A は B ですか",
+        "description": "Question form by adding か at the end. Example: あなたは学生ですか (Are you a student?)."
+    },
+    "4": {
+        "title": "A の B",
+        "description": "Possession or relation meaning 'B of A'. Example: 私の友達 (my friend)."
+    },
+    "5": {
+        "title": "A を V",
+        "description": "Marks the direct object of a verb. Example: パンを食べる (eat bread)."
+    },
+    "6": {
+        "title": "A に 行く",
+        "description": "Destination particle に with movement verbs. Example: 学校に行く (go to school)."
+    },
+    "7": {
+        "title": "A で V",
+        "description": "Indicates location where an action happens. Example: 店で食べる (eat at a shop)."
+    },
+    "8": {
+        "title": "A と B",
+        "description": "Connector meaning 'A and B'. Example: パンと水 (bread and water)."
+    },
+    "9": {
+        "title": "A も",
+        "description": "Means 'also / too'. Example: 私も学生です (I am also a student)."
+    },
+    "10": {
+        "title": "A が ある / いる",
+        "description": "Express existence. ある for objects, いる for living things. Example: 犬がいる (there is a dog)."
+    },
+    "11": {
+        "title": "Adjective + です",
+        "description": "Describing nouns using adjectives. Example: 水は冷たいです (water is cold)."
+    },
+    "12": {
+        "title": "V ます",
+        "description": "Polite verb form used in everyday conversation. Example: 食べます (to eat politely)."
+    },
+    "13": {
+        "title": "V ません",
+        "description": "Negative polite verb form. Example: 食べません (do not eat)."
+    },
+    "14": {
+        "title": "V ました",
+        "description": "Past polite verb form. Example: 食べました (ate)."
+    },
+    "15": {
+        "title": "A から B",
+        "description": "Means 'from A to B'. Example: 日本から来ました (came from Japan)."
+    },
+    "16": {
+        "title": "い-adjective + くない",
+        "description": "Negative of い-adjectives: drop い, add くない. Example: 高くない (not expensive)."
+    },
+    "17": {
+        "title": "い-adjective + かった",
+        "description": "Past of い-adjectives: drop い, add かった. Example: 楽しかった (was fun)."
+    },
+    "18": {
+        "title": "な-adjective + な + noun",
+        "description": "な-adjectives take な before a noun. Example: 静かな部屋 (a quiet room)."
+    },
+    "19": {
+        "title": "V て-form",
+        "description": "The linking form of verbs, used for requests and chaining. Example: 食べて (eat, and…)."
+    },
+    "20": {
+        "title": "V ています",
+        "description": "Ongoing action or state, like English '-ing'. Example: 食べています (is eating)."
+    },
+    "21": {
+        "title": "V てください",
+        "description": "Polite request: te-form + ください. Example: 見てください (please look)."
+    },
+    "22": {
+        "title": "V たい",
+        "description": "Want to do: verb stem + たい. Example: 食べたい (want to eat)."
+    },
+    "23": {
+        "title": "V ませんか",
+        "description": "Polite invitation: 'won't you…?'. Example: 行きませんか (shall we go?)."
+    },
+    "24": {
+        "title": "V ましょう",
+        "description": "Suggestion: 'let's…'. Example: 食べましょう (let's eat)."
+    },
+    "25": {
+        "title": "A へ 行く",
+        "description": "へ marks direction, softer than に. Example: 町へ行く (head toward town)."
+    },
+    "26": {
+        "title": "A から B まで",
+        "description": "From A until/to B, for time and space. Example: 朝から夜まで (from morning to night)."
+    },
+    "27": {
+        "title": "A より B のほうが",
+        "description": "Comparison: B more than A. Example: 犬より猫のほうが好き (I like cats more than dogs)."
+    },
+    "28": {
+        "title": "一番 + adjective",
+        "description": "Superlative: 'the most…'. Example: 一番大きい (the biggest)."
+    },
+    "29": {
+        "title": "A が 好き / 嫌い",
+        "description": "Likes and dislikes take が. Example: 音楽が好きです (I like music)."
+    },
+    "30": {
+        "title": "A が 上手 / 下手",
+        "description": "Good/bad at something takes が. Example: 歌が上手です (good at singing)."
+    },
+    "31": {
+        "title": "V ない form",
+        "description": "Plain negative: 食べない (don't eat), 行かない (don't go)."
+    },
+    "32": {
+        "title": "V た form",
+        "description": "Plain past: 食べた (ate), 行った (went)."
+    },
+    "33": {
+        "title": "V たことがある",
+        "description": "Have done before (experience). Example: 見たことがある (I have seen it)."
+    },
+    "34": {
+        "title": "V てもいいです",
+        "description": "Permission: 'may…'. Example: 入ってもいいですか (may I come in?)."
+    },
+    "35": {
+        "title": "V てはいけません",
+        "description": "Prohibition: 'must not…'. Example: 走ってはいけません (you must not run)."
+    },
+    "36": {
+        "title": "Noun + ね / よ",
+        "description": "Sentence endings: ね seeks agreement ('right?'), よ adds emphasis ('you know')."
+    },
+    "37": {
+        "title": "A は どこですか",
+        "description": "Asking where something is. Example: 駅はどこですか (where is the station?)."
+    },
+    "38": {
+        "title": "A を ください",
+        "description": "Asking for something: 'please give me A'. Example: 水をください (water, please)."
+    },
+    "39": {
+        "title": "counters つ / 人 / 本",
+        "description": "Counting depends on the thing: 一つ (one thing), 二人 (two people), 三本 (three long objects)."
+    },
+    "40": {
+        "title": "だ / です (plain vs polite)",
+        "description": "です is polite, だ is plain. Stories and friends use plain form; strangers get です."
+    }
+}

@@ -1,0 +1,1577 @@
+{
+    "1": {
+        "word": "comer",
+        "mng": "to eat",
+        "prnc": "ko-mer"
+    },
+    "2": {
+        "word": "beber",
+        "mng": "to drink",
+        "prnc": "be-ber"
+    },
+    "3": {
+        "word": "ir",
+        "mng": "to go",
+        "prnc": "eer"
+    },
+    "4": {
+        "word": "ver",
+        "mng": "to see",
+        "prnc": "ber"
+    },
+    "5": {
+        "word": "hablar",
+        "mng": "to speak",
+        "prnc": "a-blar"
+    },
+    "6": {
+        "word": "escuchar",
+        "mng": "to listen",
+        "prnc": "es-ku-char"
+    },
+    "7": {
+        "word": "comida",
+        "mng": "food",
+        "prnc": "ko-mee-da"
+    },
+    "8": {
+        "word": "agua",
+        "mng": "water",
+        "prnc": "a-gwa"
+    },
+    "9": {
+        "word": "amigo",
+        "mng": "friend",
+        "prnc": "a-mee-go"
+    },
+    "10": {
+        "word": "casa",
+        "mng": "house",
+        "prnc": "ka-sa"
+    },
+    "11": {
+        "word": "persona",
+        "mng": "person",
+        "prnc": "per-so-na"
+    },
+    "12": {
+        "word": "hombre",
+        "mng": "man",
+        "prnc": "om-bre"
+    },
+    "13": {
+        "word": "mujer",
+        "mng": "woman",
+        "prnc": "mu-her"
+    },
+    "14": {
+        "word": "niño",
+        "mng": "child",
+        "prnc": "nee-nyo"
+    },
+    "15": {
+        "word": "profesor",
+        "mng": "teacher",
+        "prnc": "pro-fe-sor"
+    },
+    "16": {
+        "word": "estudiante",
+        "mng": "student",
+        "prnc": "es-tu-dyan-te"
+    },
+    "17": {
+        "word": "tienda",
+        "mng": "shop",
+        "prnc": "tyen-da"
+    },
+    "18": {
+        "word": "escuela",
+        "mng": "school",
+        "prnc": "es-kwe-la"
+    },
+    "19": {
+        "word": "ciudad",
+        "mng": "city",
+        "prnc": "see-u-dad"
+    },
+    "20": {
+        "word": "país",
+        "mng": "country",
+        "prnc": "pa-ees"
+    },
+    "21": {
+        "word": "coche",
+        "mng": "car",
+        "prnc": "ko-che"
+    },
+    "22": {
+        "word": "camino",
+        "mng": "road",
+        "prnc": "ka-mee-no"
+    },
+    "23": {
+        "word": "montaña",
+        "mng": "mountain",
+        "prnc": "mon-ta-nya"
+    },
+    "24": {
+        "word": "río",
+        "mng": "river",
+        "prnc": "ree-o"
+    },
+    "25": {
+        "word": "mar",
+        "mng": "sea",
+        "prnc": "mar"
+    },
+    "26": {
+        "word": "cielo",
+        "mng": "sky",
+        "prnc": "see-e-lo"
+    },
+    "27": {
+        "word": "fuego",
+        "mng": "fire",
+        "prnc": "fwe-go"
+    },
+    "28": {
+        "word": "árbol",
+        "mng": "tree",
+        "prnc": "ar-bol"
+    },
+    "29": {
+        "word": "piedra",
+        "mng": "stone",
+        "prnc": "pye-dra"
+    },
+    "30": {
+        "word": "perro",
+        "mng": "dog",
+        "prnc": "pe-rro"
+    },
+    "31": {
+        "word": "gato",
+        "mng": "cat",
+        "prnc": "ga-to"
+    },
+    "32": {
+        "word": "pájaro",
+        "mng": "bird",
+        "prnc": "pa-ha-ro"
+    },
+    "33": {
+        "word": "pez",
+        "mng": "fish",
+        "prnc": "pez"
+    },
+    "34": {
+        "word": "carne",
+        "mng": "meat",
+        "prnc": "kar-ne"
+    },
+    "35": {
+        "word": "arroz",
+        "mng": "rice",
+        "prnc": "a-rroz"
+    },
+    "36": {
+        "word": "pan",
+        "mng": "bread",
+        "prnc": "pan"
+    },
+    "37": {
+        "word": "huevo",
+        "mng": "egg",
+        "prnc": "we-vo"
+    },
+    "38": {
+        "word": "fruta",
+        "mng": "fruit",
+        "prnc": "fru-ta"
+    },
+    "39": {
+        "word": "verdura",
+        "mng": "vegetable",
+        "prnc": "ver-du-ra"
+    },
+    "40": {
+        "word": "azúcar",
+        "mng": "sugar",
+        "prnc": "a-thu-kar"
+    },
+    "41": {
+        "word": "sal",
+        "mng": "salt",
+        "prnc": "sal"
+    },
+    "42": {
+        "word": "mañana",
+        "mng": "morning",
+        "prnc": "ma-nya-na"
+    },
+    "43": {
+        "word": "día",
+        "mng": "day",
+        "prnc": "dee-a"
+    },
+    "44": {
+        "word": "noche",
+        "mng": "night",
+        "prnc": "no-che"
+    },
+    "45": {
+        "word": "hoy",
+        "mng": "today",
+        "prnc": "oy"
+    },
+    "46": {
+        "word": "ayer",
+        "mng": "yesterday",
+        "prnc": "a-yer"
+    },
+    "47": {
+        "word": "mañana",
+        "mng": "tomorrow",
+        "prnc": "ma-nya-na"
+    },
+    "48": {
+        "word": "ahora",
+        "mng": "now",
+        "prnc": "a-o-ra"
+    },
+    "49": {
+        "word": "tiempo",
+        "mng": "time",
+        "prnc": "tyem-po"
+    },
+    "50": {
+        "word": "año",
+        "mng": "year",
+        "prnc": "a-nyo"
+    },
+    "51": {
+        "word": "mes",
+        "mng": "month",
+        "prnc": "mes"
+    },
+    "52": {
+        "word": "semana",
+        "mng": "week",
+        "prnc": "se-ma-na"
+    },
+    "53": {
+        "word": "día",
+        "mng": "day",
+        "prnc": "dee-a"
+    },
+    "54": {
+        "word": "grande",
+        "mng": "big",
+        "prnc": "gran-de"
+    },
+    "55": {
+        "word": "pequeño",
+        "mng": "small",
+        "prnc": "pe-ke-nyo"
+    },
+    "56": {
+        "word": "largo",
+        "mng": "long",
+        "prnc": "lar-go"
+    },
+    "57": {
+        "word": "corto",
+        "mng": "short",
+        "prnc": "kor-to"
+    },
+    "58": {
+        "word": "bueno",
+        "mng": "good",
+        "prnc": "bwe-no"
+    },
+    "59": {
+        "word": "malo",
+        "mng": "bad",
+        "prnc": "ma-lo"
+    },
+    "60": {
+        "word": "nuevo",
+        "mng": "new",
+        "prnc": "nwe-vo"
+    },
+    "61": {
+        "word": "viejo",
+        "mng": "old",
+        "prnc": "bye-ho"
+    },
+    "62": {
+        "word": "rápido",
+        "mng": "fast",
+        "prnc": "ra-pee-do"
+    },
+    "63": {
+        "word": "lento",
+        "mng": "slow",
+        "prnc": "len-to"
+    },
+    "64": {
+        "word": "caliente",
+        "mng": "hot",
+        "prnc": "ka-lyen-te"
+    },
+    "65": {
+        "word": "frío",
+        "mng": "cold",
+        "prnc": "free-o"
+    },
+    "66": {
+        "word": "gustar",
+        "mng": "to like",
+        "prnc": "gus-tar"
+    },
+    "67": {
+        "word": "odiar",
+        "mng": "to hate",
+        "prnc": "o-dyar"
+    },
+    "68": {
+        "word": "tener",
+        "mng": "to have",
+        "prnc": "te-ner"
+    },
+    "69": {
+        "word": "usar",
+        "mng": "to use",
+        "prnc": "u-sar"
+    },
+    "70": {
+        "word": "hacer",
+        "mng": "to make",
+        "prnc": "a-ser"
+    },
+    "71": {
+        "word": "comprar",
+        "mng": "to buy",
+        "prnc": "kom-prar"
+    },
+    "72": {
+        "word": "vender",
+        "mng": "to sell",
+        "prnc": "ben-der"
+    },
+    "73": {
+        "word": "caminar",
+        "mng": "to walk",
+        "prnc": "ka-mi-nar"
+    },
+    "74": {
+        "word": "correr",
+        "mng": "to run",
+        "prnc": "ko-rer"
+    },
+    "75": {
+        "word": "sentar",
+        "mng": "to sit",
+        "prnc": "sen-tar"
+    },
+    "76": {
+        "word": "estar",
+        "mng": "to be",
+        "prnc": "es-tar"
+    },
+    "77": {
+        "word": "abrir",
+        "mng": "to open",
+        "prnc": "a-breer"
+    },
+    "78": {
+        "word": "cerrar",
+        "mng": "to close",
+        "prnc": "se-rrar"
+    },
+    "79": {
+        "word": "entrar",
+        "mng": "to enter",
+        "prnc": "en-trar"
+    },
+    "80": {
+        "word": "salir",
+        "mng": "to leave",
+        "prnc": "sa-leer"
+    },
+    "81": {
+        "word": "venir",
+        "mng": "to come",
+        "prnc": "be-neer"
+    },
+    "82": {
+        "word": "existir",
+        "mng": "to exist",
+        "prnc": "eg-sis-teer"
+    },
+    "83": {
+        "word": "vivir",
+        "mng": "to live",
+        "prnc": "bee-beer"
+    },
+    "84": {
+        "word": "hacer",
+        "mng": "to do",
+        "prnc": "a-ser"
+    },
+    "85": {
+        "word": "decir",
+        "mng": "to say",
+        "prnc": "de-seer"
+    },
+    "86": {
+        "word": "escribir",
+        "mng": "to write",
+        "prnc": "es-kree-beer"
+    },
+    "87": {
+        "word": "leer",
+        "mng": "to read",
+        "prnc": "le-er"
+    },
+    "88": {
+        "word": "pensar",
+        "mng": "to think",
+        "prnc": "pen-sar"
+    },
+    "89": {
+        "word": "saber",
+        "mng": "to know",
+        "prnc": "sa-ber"
+    },
+    "90": {
+        "word": "aprender",
+        "mng": "to learn",
+        "prnc": "a-pren-der"
+    },
+    "91": {
+        "word": "enseñar",
+        "mng": "to teach",
+        "prnc": "en-se-nyar"
+    },
+    "92": {
+        "word": "trabajar",
+        "mng": "to work",
+        "prnc": "tra-ba-har"
+    },
+    "93": {
+        "word": "descansar",
+        "mng": "to rest",
+        "prnc": "des-kan-sar"
+    },
+    "94": {
+        "word": "jugar",
+        "mng": "to play",
+        "prnc": "hu-gar"
+    },
+    "95": {
+        "word": "reír",
+        "mng": "to laugh",
+        "prnc": "re-eer"
+    },
+    "96": {
+        "word": "llorar",
+        "mng": "to cry",
+        "prnc": "yo-rar"
+    },
+    "97": {
+        "word": "amor",
+        "mng": "love",
+        "prnc": "a-mor"
+    },
+    "98": {
+        "word": "dinero",
+        "mng": "money",
+        "prnc": "dee-ne-ro"
+    },
+    "99": {
+        "word": "trabajo",
+        "mng": "job",
+        "prnc": "tra-ba-ho"
+    },
+    "100": {
+        "word": "mundo",
+        "mng": "world",
+        "prnc": "mun-do"
+    },
+    "101": {
+        "word": "uno",
+        "mng": "one",
+        "prnc": "u-no"
+    },
+    "102": {
+        "word": "dos",
+        "mng": "two",
+        "prnc": "dos"
+    },
+    "103": {
+        "word": "tres",
+        "mng": "three",
+        "prnc": "tres"
+    },
+    "104": {
+        "word": "cuatro",
+        "mng": "four",
+        "prnc": "kwa-tro"
+    },
+    "105": {
+        "word": "cinco",
+        "mng": "five",
+        "prnc": "sin-ko"
+    },
+    "106": {
+        "word": "seis",
+        "mng": "six",
+        "prnc": "seis"
+    },
+    "107": {
+        "word": "siete",
+        "mng": "seven",
+        "prnc": "sye-te"
+    },
+    "108": {
+        "word": "ocho",
+        "mng": "eight",
+        "prnc": "o-cho"
+    },
+    "109": {
+        "word": "nueve",
+        "mng": "nine",
+        "prnc": "nwe-be"
+    },
+    "110": {
+        "word": "diez",
+        "mng": "ten",
+        "prnc": "dyes"
+    },
+    "111": {
+        "word": "cien",
+        "mng": "hundred",
+        "prnc": "syen"
+    },
+    "112": {
+        "word": "mil",
+        "mng": "thousand",
+        "prnc": "mil"
+    },
+    "113": {
+        "word": "color",
+        "mng": "colour",
+        "prnc": "ko-lor"
+    },
+    "114": {
+        "word": "rojo",
+        "mng": "red",
+        "prnc": "ro-ho"
+    },
+    "115": {
+        "word": "azul",
+        "mng": "blue",
+        "prnc": "a-sul"
+    },
+    "116": {
+        "word": "blanco",
+        "mng": "white",
+        "prnc": "blan-ko"
+    },
+    "117": {
+        "word": "negro",
+        "mng": "black",
+        "prnc": "ne-gro"
+    },
+    "118": {
+        "word": "verde",
+        "mng": "green",
+        "prnc": "ber-de"
+    },
+    "119": {
+        "word": "amarillo",
+        "mng": "yellow",
+        "prnc": "a-ma-ri-yo"
+    },
+    "120": {
+        "word": "yo",
+        "mng": "I / me",
+        "prnc": "yo"
+    },
+    "121": {
+        "word": "tú",
+        "mng": "you",
+        "prnc": "tu"
+    },
+    "122": {
+        "word": "él",
+        "mng": "he",
+        "prnc": "el"
+    },
+    "123": {
+        "word": "ella",
+        "mng": "she",
+        "prnc": "e-ya"
+    },
+    "124": {
+        "word": "nosotros",
+        "mng": "we",
+        "prnc": "no-so-tros"
+    },
+    "125": {
+        "word": "todos",
+        "mng": "everyone",
+        "prnc": "to-dos"
+    },
+    "126": {
+        "word": "familia",
+        "mng": "family",
+        "prnc": "fa-mi-lya"
+    },
+    "127": {
+        "word": "padre",
+        "mng": "father",
+        "prnc": "pa-dre"
+    },
+    "128": {
+        "word": "madre",
+        "mng": "mother",
+        "prnc": "ma-dre"
+    },
+    "129": {
+        "word": "hermano",
+        "mng": "brother",
+        "prnc": "er-ma-no"
+    },
+    "130": {
+        "word": "hermana",
+        "mng": "sister",
+        "prnc": "er-ma-na"
+    },
+    "131": {
+        "word": "hijo",
+        "mng": "son",
+        "prnc": "i-ho"
+    },
+    "132": {
+        "word": "hija",
+        "mng": "daughter",
+        "prnc": "i-ha"
+    },
+    "133": {
+        "word": "abuelo",
+        "mng": "grandfather",
+        "prnc": "a-bwe-lo"
+    },
+    "134": {
+        "word": "abuela",
+        "mng": "grandmother",
+        "prnc": "a-bwe-la"
+    },
+    "135": {
+        "word": "nombre",
+        "mng": "name",
+        "prnc": "nom-bre"
+    },
+    "136": {
+        "word": "mano",
+        "mng": "hand",
+        "prnc": "ma-no"
+    },
+    "137": {
+        "word": "pie",
+        "mng": "foot",
+        "prnc": "pye"
+    },
+    "138": {
+        "word": "ojo",
+        "mng": "eye",
+        "prnc": "o-ho"
+    },
+    "139": {
+        "word": "oreja",
+        "mng": "ear",
+        "prnc": "o-re-ha"
+    },
+    "140": {
+        "word": "boca",
+        "mng": "mouth",
+        "prnc": "bo-ka"
+    },
+    "141": {
+        "word": "cabeza",
+        "mng": "head",
+        "prnc": "ka-be-sa"
+    },
+    "142": {
+        "word": "corazón",
+        "mng": "heart",
+        "prnc": "ko-ra-son"
+    },
+    "143": {
+        "word": "cuerpo",
+        "mng": "body",
+        "prnc": "kwer-po"
+    },
+    "144": {
+        "word": "cara",
+        "mng": "face",
+        "prnc": "ka-ra"
+    },
+    "145": {
+        "word": "flor",
+        "mng": "flower",
+        "prnc": "flor"
+    },
+    "146": {
+        "word": "lluvia",
+        "mng": "rain",
+        "prnc": "yu-bya"
+    },
+    "147": {
+        "word": "nieve",
+        "mng": "snow",
+        "prnc": "nye-be"
+    },
+    "148": {
+        "word": "viento",
+        "mng": "wind",
+        "prnc": "byen-to"
+    },
+    "149": {
+        "word": "estrella",
+        "mng": "star",
+        "prnc": "es-tre-ya"
+    },
+    "150": {
+        "word": "sol",
+        "mng": "sun",
+        "prnc": "sol"
+    },
+    "151": {
+        "word": "luna",
+        "mng": "moon",
+        "prnc": "lu-na"
+    },
+    "152": {
+        "word": "bosque",
+        "mng": "forest",
+        "prnc": "bos-ke"
+    },
+    "153": {
+        "word": "isla",
+        "mng": "island",
+        "prnc": "is-la"
+    },
+    "154": {
+        "word": "playa",
+        "mng": "beach",
+        "prnc": "pla-ya"
+    },
+    "155": {
+        "word": "clima",
+        "mng": "weather",
+        "prnc": "kli-ma"
+    },
+    "156": {
+        "word": "tormenta",
+        "mng": "storm",
+        "prnc": "tor-men-ta"
+    },
+    "157": {
+        "word": "luz",
+        "mng": "light",
+        "prnc": "lus"
+    },
+    "158": {
+        "word": "sombra",
+        "mng": "shadow",
+        "prnc": "som-bra"
+    },
+    "159": {
+        "word": "estación",
+        "mng": "station",
+        "prnc": "es-ta-syon"
+    },
+    "160": {
+        "word": "hospital",
+        "mng": "hospital",
+        "prnc": "os-pi-tal"
+    },
+    "161": {
+        "word": "banco",
+        "mng": "bank",
+        "prnc": "ban-ko"
+    },
+    "162": {
+        "word": "parque",
+        "mng": "park",
+        "prnc": "par-ke"
+    },
+    "163": {
+        "word": "habitación",
+        "mng": "room",
+        "prnc": "a-bi-ta-syon"
+    },
+    "164": {
+        "word": "cocina",
+        "mng": "kitchen",
+        "prnc": "ko-si-na"
+    },
+    "165": {
+        "word": "ventana",
+        "mng": "window",
+        "prnc": "ben-ta-na"
+    },
+    "166": {
+        "word": "puerta",
+        "mng": "door",
+        "prnc": "pwer-ta"
+    },
+    "167": {
+        "word": "puente",
+        "mng": "bridge",
+        "prnc": "pwen-te"
+    },
+    "168": {
+        "word": "castillo",
+        "mng": "castle",
+        "prnc": "kas-ti-yo"
+    },
+    "169": {
+        "word": "pueblo",
+        "mng": "village",
+        "prnc": "pwe-blo"
+    },
+    "170": {
+        "word": "iglesia",
+        "mng": "church",
+        "prnc": "i-gle-sya"
+    },
+    "171": {
+        "word": "mercado",
+        "mng": "market",
+        "prnc": "mer-ka-do"
+    },
+    "172": {
+        "word": "biblioteca",
+        "mng": "library",
+        "prnc": "bi-blyo-te-ka"
+    },
+    "173": {
+        "word": "posada",
+        "mng": "inn",
+        "prnc": "po-sa-da"
+    },
+    "174": {
+        "word": "jardín",
+        "mng": "garden",
+        "prnc": "har-din"
+    },
+    "175": {
+        "word": "plaza",
+        "mng": "square (plaza)",
+        "prnc": "pla-sa"
+    },
+    "176": {
+        "word": "calle",
+        "mng": "street",
+        "prnc": "ka-ye"
+    },
+    "177": {
+        "word": "libro",
+        "mng": "book",
+        "prnc": "li-bro"
+    },
+    "178": {
+        "word": "mesa",
+        "mng": "table",
+        "prnc": "me-sa"
+    },
+    "179": {
+        "word": "silla",
+        "mng": "chair",
+        "prnc": "si-ya"
+    },
+    "180": {
+        "word": "cama",
+        "mng": "bed",
+        "prnc": "ka-ma"
+    },
+    "181": {
+        "word": "teléfono",
+        "mng": "telephone",
+        "prnc": "te-le-fo-no"
+    },
+    "182": {
+        "word": "ropa",
+        "mng": "clothes",
+        "prnc": "ro-pa"
+    },
+    "183": {
+        "word": "zapato",
+        "mng": "shoe",
+        "prnc": "sa-pa-to"
+    },
+    "184": {
+        "word": "sombrero",
+        "mng": "hat",
+        "prnc": "som-bre-ro"
+    },
+    "185": {
+        "word": "paraguas",
+        "mng": "umbrella",
+        "prnc": "pa-ra-gwas"
+    },
+    "186": {
+        "word": "bolsa",
+        "mng": "bag",
+        "prnc": "bol-sa"
+    },
+    "187": {
+        "word": "llave",
+        "mng": "key",
+        "prnc": "ya-be"
+    },
+    "188": {
+        "word": "mapa",
+        "mng": "map",
+        "prnc": "ma-pa"
+    },
+    "189": {
+        "word": "carta",
+        "mng": "letter",
+        "prnc": "kar-ta"
+    },
+    "190": {
+        "word": "foto",
+        "mng": "photograph",
+        "prnc": "fo-to"
+    },
+    "191": {
+        "word": "canción",
+        "mng": "song",
+        "prnc": "kan-syon"
+    },
+    "192": {
+        "word": "música",
+        "mng": "music",
+        "prnc": "mu-si-ka"
+    },
+    "193": {
+        "word": "película",
+        "mng": "film",
+        "prnc": "pe-li-ku-la"
+    },
+    "194": {
+        "word": "periódico",
+        "mng": "newspaper",
+        "prnc": "pe-ryo-di-ko"
+    },
+    "195": {
+        "word": "caja",
+        "mng": "box",
+        "prnc": "ka-ha"
+    },
+    "196": {
+        "word": "plato",
+        "mng": "plate",
+        "prnc": "pla-to"
+    },
+    "197": {
+        "word": "vaso",
+        "mng": "glass (cup)",
+        "prnc": "ba-so"
+    },
+    "198": {
+        "word": "cuchillo",
+        "mng": "knife",
+        "prnc": "ku-chi-yo"
+    },
+    "199": {
+        "word": "espada",
+        "mng": "sword",
+        "prnc": "es-pa-da"
+    },
+    "200": {
+        "word": "escudo",
+        "mng": "shield",
+        "prnc": "es-ku-do"
+    },
+    "201": {
+        "word": "tesoro",
+        "mng": "treasure",
+        "prnc": "te-so-ro"
+    },
+    "202": {
+        "word": "medicina",
+        "mng": "medicine",
+        "prnc": "me-di-si-na"
+    },
+    "203": {
+        "word": "regalo",
+        "mng": "gift",
+        "prnc": "re-ga-lo"
+    },
+    "204": {
+        "word": "té",
+        "mng": "tea",
+        "prnc": "te"
+    },
+    "205": {
+        "word": "café",
+        "mng": "coffee",
+        "prnc": "ka-fe"
+    },
+    "206": {
+        "word": "leche",
+        "mng": "milk",
+        "prnc": "le-che"
+    },
+    "207": {
+        "word": "vino",
+        "mng": "wine",
+        "prnc": "bi-no"
+    },
+    "208": {
+        "word": "sopa",
+        "mng": "soup",
+        "prnc": "so-pa"
+    },
+    "209": {
+        "word": "queso",
+        "mng": "cheese",
+        "prnc": "ke-so"
+    },
+    "210": {
+        "word": "pollo",
+        "mng": "chicken",
+        "prnc": "po-yo"
+    },
+    "211": {
+        "word": "pescado",
+        "mng": "fish (food)",
+        "prnc": "pes-ka-do"
+    },
+    "212": {
+        "word": "manzana",
+        "mng": "apple",
+        "prnc": "man-sa-na"
+    },
+    "213": {
+        "word": "naranja",
+        "mng": "orange",
+        "prnc": "na-ran-ha"
+    },
+    "214": {
+        "word": "dormir",
+        "mng": "to sleep",
+        "prnc": "dor-mir"
+    },
+    "215": {
+        "word": "despertar",
+        "mng": "to wake up",
+        "prnc": "des-per-tar"
+    },
+    "216": {
+        "word": "esperar",
+        "mng": "to wait",
+        "prnc": "es-pe-rar"
+    },
+    "217": {
+        "word": "encontrar",
+        "mng": "to find",
+        "prnc": "en-kon-trar"
+    },
+    "218": {
+        "word": "volver",
+        "mng": "to return",
+        "prnc": "bol-ber"
+    },
+    "219": {
+        "word": "volar",
+        "mng": "to fly",
+        "prnc": "bo-lar"
+    },
+    "220": {
+        "word": "nadar",
+        "mng": "to swim",
+        "prnc": "na-dar"
+    },
+    "221": {
+        "word": "cantar",
+        "mng": "to sing",
+        "prnc": "kan-tar"
+    },
+    "222": {
+        "word": "bailar",
+        "mng": "to dance",
+        "prnc": "bai-lar"
+    },
+    "223": {
+        "word": "elegir",
+        "mng": "to choose",
+        "prnc": "e-le-hir"
+    },
+    "224": {
+        "word": "buscar",
+        "mng": "to search for",
+        "prnc": "bus-kar"
+    },
+    "225": {
+        "word": "ayudar",
+        "mng": "to help",
+        "prnc": "a-yu-dar"
+    },
+    "226": {
+        "word": "llamar",
+        "mng": "to call",
+        "prnc": "ya-mar"
+    },
+    "227": {
+        "word": "responder",
+        "mng": "to answer",
+        "prnc": "res-pon-der"
+    },
+    "228": {
+        "word": "recordar",
+        "mng": "to remember",
+        "prnc": "re-kor-dar"
+    },
+    "229": {
+        "word": "olvidar",
+        "mng": "to forget",
+        "prnc": "ol-bi-dar"
+    },
+    "230": {
+        "word": "empezar",
+        "mng": "to begin",
+        "prnc": "em-pe-sar"
+    },
+    "231": {
+        "word": "terminar",
+        "mng": "to finish",
+        "prnc": "ter-mi-nar"
+    },
+    "232": {
+        "word": "ganar",
+        "mng": "to win",
+        "prnc": "ga-nar"
+    },
+    "233": {
+        "word": "perder",
+        "mng": "to lose",
+        "prnc": "per-der"
+    },
+    "234": {
+        "word": "pagar",
+        "mng": "to pay",
+        "prnc": "pa-gar"
+    },
+    "235": {
+        "word": "prestar",
+        "mng": "to lend",
+        "prnc": "pres-tar"
+    },
+    "236": {
+        "word": "enviar",
+        "mng": "to send",
+        "prnc": "en-byar"
+    },
+    "237": {
+        "word": "llevar",
+        "mng": "to carry / wear",
+        "prnc": "ye-bar"
+    },
+    "238": {
+        "word": "lavar",
+        "mng": "to wash",
+        "prnc": "la-bar"
+    },
+    "239": {
+        "word": "cortar",
+        "mng": "to cut",
+        "prnc": "kor-tar"
+    },
+    "240": {
+        "word": "empujar",
+        "mng": "to push",
+        "prnc": "em-pu-har"
+    },
+    "241": {
+        "word": "tirar",
+        "mng": "to pull / throw",
+        "prnc": "ti-rar"
+    },
+    "242": {
+        "word": "tomar",
+        "mng": "to take / drink",
+        "prnc": "to-mar"
+    },
+    "243": {
+        "word": "poner",
+        "mng": "to put",
+        "prnc": "po-ner"
+    },
+    "244": {
+        "word": "dar",
+        "mng": "to give",
+        "prnc": "dar"
+    },
+    "245": {
+        "word": "mostrar",
+        "mng": "to show",
+        "prnc": "mos-trar"
+    },
+    "246": {
+        "word": "necesitar",
+        "mng": "to need",
+        "prnc": "ne-se-si-tar"
+    },
+    "247": {
+        "word": "querer",
+        "mng": "to want / love",
+        "prnc": "ke-rer"
+    },
+    "248": {
+        "word": "poder",
+        "mng": "to be able to",
+        "prnc": "po-der"
+    },
+    "249": {
+        "word": "viajar",
+        "mng": "to travel",
+        "prnc": "bya-har"
+    },
+    "250": {
+        "word": "luchar",
+        "mng": "to fight",
+        "prnc": "lu-char"
+    },
+    "251": {
+        "word": "proteger",
+        "mng": "to protect",
+        "prnc": "pro-te-her"
+    },
+    "252": {
+        "word": "conocer",
+        "mng": "to know (a person/place)",
+        "prnc": "ko-no-ser"
+    },
+    "253": {
+        "word": "preguntar",
+        "mng": "to ask",
+        "prnc": "pre-gun-tar"
+    },
+    "254": {
+        "word": "alto",
+        "mng": "tall",
+        "prnc": "al-to"
+    },
+    "255": {
+        "word": "bajo",
+        "mng": "short (height)",
+        "prnc": "ba-ho"
+    },
+    "256": {
+        "word": "caro",
+        "mng": "expensive",
+        "prnc": "ka-ro"
+    },
+    "257": {
+        "word": "barato",
+        "mng": "cheap",
+        "prnc": "ba-ra-to"
+    },
+    "258": {
+        "word": "fuerte",
+        "mng": "strong",
+        "prnc": "fwer-te"
+    },
+    "259": {
+        "word": "débil",
+        "mng": "weak",
+        "prnc": "de-bil"
+    },
+    "260": {
+        "word": "hermoso",
+        "mng": "beautiful",
+        "prnc": "er-mo-so"
+    },
+    "261": {
+        "word": "bonito",
+        "mng": "pretty",
+        "prnc": "bo-ni-to"
+    },
+    "262": {
+        "word": "feliz",
+        "mng": "happy",
+        "prnc": "fe-lis"
+    },
+    "263": {
+        "word": "triste",
+        "mng": "sad",
+        "prnc": "tris-te"
+    },
+    "264": {
+        "word": "divertido",
+        "mng": "fun / amusing",
+        "prnc": "di-ber-ti-do"
+    },
+    "265": {
+        "word": "interesante",
+        "mng": "interesting",
+        "prnc": "in-te-re-san-te"
+    },
+    "266": {
+        "word": "fácil",
+        "mng": "easy",
+        "prnc": "fa-sil"
+    },
+    "267": {
+        "word": "difícil",
+        "mng": "difficult",
+        "prnc": "di-fi-sil"
+    },
+    "268": {
+        "word": "tranquilo",
+        "mng": "calm / quiet",
+        "prnc": "tran-ki-lo"
+    },
+    "269": {
+        "word": "oscuro",
+        "mng": "dark",
+        "prnc": "os-ku-ro"
+    },
+    "270": {
+        "word": "claro",
+        "mng": "bright / clear",
+        "prnc": "kla-ro"
+    },
+    "271": {
+        "word": "pesado",
+        "mng": "heavy",
+        "prnc": "pe-sa-do"
+    },
+    "272": {
+        "word": "ligero",
+        "mng": "light (weight)",
+        "prnc": "li-he-ro"
+    },
+    "273": {
+        "word": "dulce",
+        "mng": "sweet",
+        "prnc": "dul-se"
+    },
+    "274": {
+        "word": "picante",
+        "mng": "spicy",
+        "prnc": "pi-kan-te"
+    },
+    "275": {
+        "word": "delicioso",
+        "mng": "delicious",
+        "prnc": "de-li-syo-so"
+    },
+    "276": {
+        "word": "ocupado",
+        "mng": "busy",
+        "prnc": "o-ku-pa-do"
+    },
+    "277": {
+        "word": "cansado",
+        "mng": "tired",
+        "prnc": "kan-sa-do"
+    },
+    "278": {
+        "word": "joven",
+        "mng": "young",
+        "prnc": "ho-ben"
+    },
+    "279": {
+        "word": "importante",
+        "mng": "important",
+        "prnc": "im-por-tan-te"
+    },
+    "280": {
+        "word": "peligroso",
+        "mng": "dangerous",
+        "prnc": "pe-li-gro-so"
+    },
+    "281": {
+        "word": "valiente",
+        "mng": "brave",
+        "prnc": "ba-lyen-te"
+    },
+    "282": {
+        "word": "qué",
+        "mng": "what",
+        "prnc": "ke"
+    },
+    "283": {
+        "word": "quién",
+        "mng": "who",
+        "prnc": "kyen"
+    },
+    "284": {
+        "word": "dónde",
+        "mng": "where",
+        "prnc": "don-de"
+    },
+    "285": {
+        "word": "cuándo",
+        "mng": "when",
+        "prnc": "kwan-do"
+    },
+    "286": {
+        "word": "por qué",
+        "mng": "why",
+        "prnc": "por-ke"
+    },
+    "287": {
+        "word": "cómo",
+        "mng": "how",
+        "prnc": "ko-mo"
+    },
+    "288": {
+        "word": "esto",
+        "mng": "this",
+        "prnc": "es-to"
+    },
+    "289": {
+        "word": "eso",
+        "mng": "that",
+        "prnc": "e-so"
+    },
+    "290": {
+        "word": "aquí",
+        "mng": "here",
+        "prnc": "a-ki"
+    },
+    "291": {
+        "word": "allí",
+        "mng": "there",
+        "prnc": "a-yi"
+    },
+    "292": {
+        "word": "siempre",
+        "mng": "always",
+        "prnc": "syem-pre"
+    },
+    "293": {
+        "word": "nunca",
+        "mng": "never",
+        "prnc": "nun-ka"
+    },
+    "294": {
+        "word": "a veces",
+        "mng": "sometimes",
+        "prnc": "a-be-ses"
+    },
+    "295": {
+        "word": "mucho",
+        "mng": "a lot",
+        "prnc": "mu-cho"
+    },
+    "296": {
+        "word": "poco",
+        "mng": "a little",
+        "prnc": "po-ko"
+    },
+    "297": {
+        "word": "más",
+        "mng": "more",
+        "prnc": "mas"
+    },
+    "298": {
+        "word": "muy",
+        "mng": "very",
+        "prnc": "mwi"
+    },
+    "299": {
+        "word": "también",
+        "mng": "also",
+        "prnc": "tam-byen"
+    },
+    "300": {
+        "word": "historia",
+        "mng": "story",
+        "prnc": "is-to-rya"
+    },
+    "301": {
+        "word": "sueño",
+        "mng": "dream",
+        "prnc": "swe-nyo"
+    },
+    "302": {
+        "word": "voz",
+        "mng": "voice",
+        "prnc": "bos"
+    },
+    "303": {
+        "word": "sonido",
+        "mng": "sound",
+        "prnc": "so-ni-do"
+    },
+    "304": {
+        "word": "fuerza",
+        "mng": "strength / power",
+        "prnc": "fwer-sa"
+    },
+    "305": {
+        "word": "magia",
+        "mng": "magic",
+        "prnc": "ma-hya"
+    },
+    "306": {
+        "word": "dragón",
+        "mng": "dragon",
+        "prnc": "dra-gon"
+    },
+    "307": {
+        "word": "aventura",
+        "mng": "adventure",
+        "prnc": "a-ben-tu-ra"
+    },
+    "308": {
+        "word": "palabra",
+        "mng": "word",
+        "prnc": "pa-la-bra"
+    },
+    "309": {
+        "word": "pregunta",
+        "mng": "question",
+        "prnc": "pre-gun-ta"
+    },
+    "310": {
+        "word": "respuesta",
+        "mng": "answer",
+        "prnc": "res-pwes-ta"
+    },
+    "311": {
+        "word": "problema",
+        "mng": "problem",
+        "prnc": "pro-ble-ma"
+    },
+    "312": {
+        "word": "secreto",
+        "mng": "secret",
+        "prnc": "se-kre-to"
+    },
+    "313": {
+        "word": "peligro",
+        "mng": "danger",
+        "prnc": "pe-li-gro"
+    },
+    "314": {
+        "word": "promesa",
+        "mng": "promise",
+        "prnc": "pro-me-sa"
+    },
+    "315": {
+        "word": "viaje",
+        "mng": "journey",
+        "prnc": "bya-he"
+    }
+}

@@ -47,7 +47,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             return token;
         },
         session({ session, token }) {
-            if (token?.id) {
+            if (typeof token?.id === "string") {
                 session.user.id = token.id; // Pass the user ID to the session
             }
 

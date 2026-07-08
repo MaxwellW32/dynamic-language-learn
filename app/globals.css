@@ -1,309 +1,127 @@
 @import "tailwindcss";
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  /* border: 1px solid red !important; */
+/*
+ * The book's palette: parchment, ink, wood, moss, ember, gold.
+ * Everything in the app should feel like it was printed, inked, or carved.
+ */
+@theme inline {
+    --color-parchment: #f7ecd4;
+    --color-parchment-deep: #efdfb9;
+    --color-parchment-dark: #e4cf9e;
+    --color-ink: #3a2d22;
+    --color-ink-soft: #6e5b47;
+    --color-ink-faint: #9c8a72;
+    --color-wood: #7c5433;
+    --color-wood-dark: #52351d;
+    --color-moss: #5f7a45;
+    --color-moss-deep: #43592f;
+    --color-ember: #c2571b;
+    --color-ember-deep: #96400f;
+    --color-gold: #c99e2c;
+    --color-night: #241a12;
+
+    --font-display: var(--font-im-fell), Georgia, serif;
+    --font-body: var(--font-crimson), Georgia, serif;
+    --font-hand: var(--font-caveat), cursive;
+
+    --shadow-page: 0 2px 6px rgb(58 45 34 / 0.18), 0 12px 40px rgb(58 45 34 / 0.22);
+    --shadow-card: 0 1px 3px rgb(58 45 34 / 0.25), 0 6px 18px rgb(58 45 34 / 0.18);
+
+    --animate-bob: bob 2.4s ease-in-out infinite;
+    --animate-flicker: flicker 2.8s ease-in-out infinite;
+    --animate-page-in: pageIn 0.5s ease-out both;
+
+    @keyframes bob {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-6%); }
+    }
+    @keyframes flicker {
+        0%, 100% { opacity: 1; }
+        45% { opacity: 0.82; }
+        60% { opacity: 0.95; }
+        75% { opacity: 0.85; }
+    }
+    @keyframes pageIn {
+        from { opacity: 0; transform: translateY(0.6rem); }
+        to { opacity: 1; transform: translateY(0); }
+    }
 }
 
-:root {
-  /* --c1: #e11d48; */
-  --c1: #2563eb;
-  --c1Light: hsl(from var(--c1) h s calc(l * 1.1));
-  --c1Dark: hsl(from var(--c1) h s calc(l * 0.5));
-
-  --c2: #f2dcb1;
-  --c5: #f00;
-
-
-  /* used with outlines/borders */
-  --shade1: #000000;
-  --shade2: #e1e1e1;
-  --shade3: #494949;
-
-  /* text colors - can swap */
-  --textC1: #000000;
-  --textC2: #ffffff;
-  /* light/dark swap  */
-  --textSC1: var(--textC1);
-
-  --bg1: #ffc996;
-  --bg2: #ffffff;
-
-  --sizeEEL: 6rem;
-  --sizeEL: 4rem;
-  --sizeLEL: 2.5rem;
-  --sizeL: 2rem;
-  --sizeM: 1.5rem;
-  --sizeR: 1rem;
-  --sizeS: .7rem;
-
-  --fontSizeTitle: clamp(2rem, 4vw, 3.5rem);
-  --fontSizeL: clamp(1.7rem, 3vw, 2.5rem);
-  --fontSizeM: clamp(1.5rem, 3vw, 2.25rem);
-  --fontSizeR: 1rem;
-  --fontSizeS: .7rem;
-
-  --spacingEL: 5rem;
-  --spacingL: 2rem;
-  --spacingM: 1.3rem;
-  --spacingR: 1rem;
-  --spacingS: .5rem;
-  --spacingES: .2rem;
-
-  --borderRadiusEL: 50%;
-  --borderRadiusL: 2rem;
-  --borderRadiusR: 1rem;
-  --borderRadiusS: 0.5rem;
-  --borderRadiusES: 0.2rem;
-
-  --transitionTimeR: 400ms;
-  --transitionTimeS: 200ms;
-
-  --animationTimeR: 400ms;
-  --animationTimeS: 200ms;
-}
-
-*::-webkit-scrollbar-thumb {
-  background-color: black;
-}
-
-*::-webkit-scrollbar {
-  height: .2rem;
-  width: .2rem;
-}
-
-*::-webkit-scrollbar-track {
-  background-color: white,
-}
-
-html {
-  scroll-behavior: smooth;
-  width: 100%;
-  height: 100%;
+html, body {
+    height: 100%;
 }
 
 body {
-  height: 100%;
-  overflow: auto;
-  display: grid;
-  grid-template-rows: auto 1fr;
-  align-content: flex-start;
-  background-color: var(--bg2);
-  font-size: var(--fontSizeR);
-  color: var(--textC1);
-  font-family: Arial, Helvetica, sans-serif;
+    font-family: var(--font-body);
+    color: var(--color-ink);
+    background-color: var(--color-night);
+    /* the desk the book lies on: deep wood with a soft candle glow */
+    background-image:
+        radial-gradient(ellipse 90% 70% at 50% 20%, rgb(124 84 51 / 0.35), transparent 65%),
+        repeating-linear-gradient(95deg, rgb(0 0 0 / 0.14) 0 3px, transparent 3px 24px),
+        linear-gradient(180deg, #2d2015, #1c130b);
+    background-attachment: fixed;
 }
 
-main {
-  display: grid;
-  align-content: flex-start;
+/* parchment surface with grain and a warm vignette */
+.parchment {
+    background-color: var(--color-parchment);
+    background-image:
+        radial-gradient(ellipse at 18% 12%, rgb(255 252 240 / 0.7), transparent 55%),
+        radial-gradient(ellipse at 85% 90%, rgb(196 164 105 / 0.28), transparent 60%),
+        repeating-radial-gradient(circle at 40% 30%, transparent 0 7px, rgb(160 130 80 / 0.045) 7px 9px);
+    box-shadow:
+        inset 0 0 60px rgb(160 124 66 / 0.25),
+        inset 0 0 6px rgb(160 124 66 / 0.2);
 }
 
-h1,
-h2,
-h3 {
-  font-weight: 600;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
-  color: var(--textC1);
+/* a carved wooden frame around a page or card */
+.wood-frame {
+    border: 10px solid transparent;
+    border-image: linear-gradient(135deg, #8a5d36, #5c3d22 30%, #7c5433 55%, #4c3119 80%, #8a5d36) 1;
+    box-shadow:
+        inset 0 0 0 2px rgb(36 26 18 / 0.55),
+        var(--shadow-page);
 }
 
-h1 {
-  font-size: var(--fontSizeL);
+/* ink-on-paper text rhythm for story prose */
+.prose-story {
+    font-size: 1.09rem;
+    line-height: 1.75;
+    letter-spacing: 0.005em;
 }
 
-h2 {
-  font-size: var(--fontSizeM);
+.prose-story p + p {
+    margin-top: 0.75em;
 }
 
-h3 {
-  font-size: var(--fontSizeR);
+/* drop cap for the first passage of a chapter */
+.drop-cap::first-letter {
+    font-family: var(--font-display);
+    font-size: 3.1em;
+    line-height: 0.85;
+    float: left;
+    padding-right: 0.09em;
+    color: var(--color-ember-deep);
 }
 
-p {
-  font-size: var(--fontSizeR);
-  line-height: 1.7;
-  color: var(--textC1);
-  max-width: 65ch;
+/* dashed underline for tappable vocabulary */
+.vocab-word {
+    color: var(--color-ember-deep);
+    font-weight: 600;
+    text-decoration: underline dashed rgb(150 64 15 / 0.55);
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 3px;
+    cursor: pointer;
+    border-radius: 3px;
 }
 
-svg {
-  aspect-ratio: 1/1;
-  width: var(--sizeR);
-  height: var(--sizeR);
+.vocab-word:hover {
+    background: rgb(201 158 44 / 0.18);
 }
 
-form {
-  display: grid;
-  align-content: flex-start;
-  gap: var(--spacingR);
-  padding: var(--spacingR);
-  overflow: auto;
-}
-
-label {
-  text-transform: capitalize;
-  font-weight: bold;
-  font-size: var(--fontSizeR);
-}
-
-input,
-textarea {
-  padding: var(--spacingR);
-  background-color: var(--bg2);
-  color: var(--textC1);
-  border-radius: var(--borderRadiusS);
-  border: 1px solid var(--shade3);
-}
-
-input:focus,
-textarea:focus {
-  border: 1px solid var(--shade1);
-  outline: none;
-}
-
-input::placeholder,
-textarea::placeholder {
-  text-transform: capitalize;
-}
-
-input[type="checkbox"] {
-  cursor: pointer;
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/* custom classes */
-.icon {
-  transition: scale var(--animationTimeR);
-  margin: var(--spacingES);
-  cursor: pointer;
-}
-
-.icon:hover {
-  scale: 1.1;
-}
-
-
-
-
-.button1 {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  justify-self: flex-start;
-  gap: 0.5rem;
-
-  padding: 0.75rem 1.25rem;
-  border-radius: var(--borderRadiusS);
-  border: none;
-
-  background-color: var(--c1);
-  color: var(--textC2);
-  font-weight: 500;
-  font-size: var(--fontSizeR);
-  text-transform: capitalize;
-
-  cursor: pointer;
-  transition: var(--transitionTimeR);
-}
-
-.button1:hover,
-.button1:active {
-  background: var(--c1Light);
-}
-
-.button2 {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  justify-self: flex-start;
-  text-transform: capitalize;
-  padding: 0.5rem 1rem;
-  border-radius: var(--borderRadiusS);
-  background: var(--bg2);
-  border: 1px solid var(--shade1);
-  color: var(--textC1);
-  font-weight: 500;
-  cursor: pointer;
-  transition: var(--transitionTimeR);
-  font-size: var(--fontSizeS);
-}
-
-.button2:hover {
-  background: var(--shade2);
-}
-
-
-
-
-.snap {
-  scroll-snap-type: x mandatory;
-}
-
-.snap>* {
-  scroll-snap-align: start;
-}
-
-
-
-
-.simpleFlex {
-  display: flex;
-  align-items: center;
-  gap: var(--spacingS);
-  flex-wrap: wrap;
-}
-
-.simpleContainer1 {
-  display: grid;
-  align-content: flex-start;
-  gap: var(--spacingR);
-  padding: var(--spacingR);
-  border: 1px solid var(--shade1);
-  border-radius: var(--borderRadiusR);
-}
-
-.simpleContainer2 {
-  display: grid;
-  align-content: flex-start;
-  gap: var(--spacingR);
-  padding: var(--spacingR);
-}
-
-.simpleGrid {
-  display: grid;
-  align-content: flex-start;
-}
-
-.gridColumn {
-  display: grid;
-  align-content: flex-start;
-  grid-auto-flow: column;
-  gap: var(--spacingR);
-  grid-auto-columns: min(350px, 100%);
-  overflow: auto;
-}
-
-.errorText {
-  color: var(--c5);
-  font-size: var(--fontSizeS);
+/* thin scrollbars that look like they belong on paper */
+.scroll-ink {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(124 84 51 / 0.5) transparent;
 }

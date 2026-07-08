@@ -1,0 +1,162 @@
+{
+    "1": {
+        "title": "Subject + ser",
+        "description": "Basic identity sentence using 'ser'. Example: Yo soy estudiante (I am a student)."
+    },
+    "2": {
+        "title": "Subject + estar",
+        "description": "Used for temporary states or locations. Example: Estoy cansado (I am tired)."
+    },
+    "3": {
+        "title": "Ser vs Estar",
+        "description": "Ser for permanent traits, estar for temporary conditions."
+    },
+    "4": {
+        "title": "Subject + tener",
+        "description": "Express possession or states. Example: Tengo hambre (I am hungry)."
+    },
+    "5": {
+        "title": "Subject + verb",
+        "description": "Basic present tense structure. Example: Yo como (I eat)."
+    },
+    "6": {
+        "title": "Verb conjugation -ar",
+        "description": "Present tense for -ar verbs. Example: hablar → hablo, hablas, habla."
+    },
+    "7": {
+        "title": "Verb conjugation -er",
+        "description": "Present tense for -er verbs. Example: comer → como, comes, come."
+    },
+    "8": {
+        "title": "Verb conjugation -ir",
+        "description": "Present tense for -ir verbs. Example: vivir → vivo, vives, vive."
+    },
+    "9": {
+        "title": "Question formation",
+        "description": "Spanish questions often rely on tone or punctuation. Example: ¿Hablas español?"
+    },
+    "10": {
+        "title": "Negation with no",
+        "description": "Place 'no' before a verb. Example: No como carne (I do not eat meat)."
+    },
+    "11": {
+        "title": "Articles el / la / los / las",
+        "description": "Definite articles for gender and number."
+    },
+    "12": {
+        "title": "Adjective agreement",
+        "description": "Adjectives match gender and number. Example: gato negro, casa negra."
+    },
+    "13": {
+        "title": "Hay",
+        "description": "Means 'there is / there are'. Example: Hay un perro (there is a dog)."
+    },
+    "14": {
+        "title": "Ir a + verb",
+        "description": "Used for future plans. Example: Voy a comer (I am going to eat)."
+    },
+    "15": {
+        "title": "Gustar",
+        "description": "Used to express liking. Example: Me gusta el pan (I like bread)."
+    },
+    "16": {
+        "title": "Plural nouns",
+        "description": "Add -s after a vowel, -es after a consonant. Example: casa → casas, flor → flores."
+    },
+    "17": {
+        "title": "Possessives mi / tu / su",
+        "description": "My, your, his/her before a noun. Example: mi amigo (my friend), su casa (their house)."
+    },
+    "18": {
+        "title": "Estar + gerundio",
+        "description": "Ongoing action: estar + -ando/-iendo. Example: estoy comiendo (I am eating)."
+    },
+    "19": {
+        "title": "Preterite -ar verbs",
+        "description": "Completed past: hablé, hablaste, habló. Example: compré pan (I bought bread)."
+    },
+    "20": {
+        "title": "Preterite -er / -ir verbs",
+        "description": "Completed past: comí, comiste, comió. Example: salió de casa (he left the house)."
+    },
+    "21": {
+        "title": "Reflexive verbs",
+        "description": "Action on oneself with me/te/se. Example: me levanto (I get up), se llama (he is called)."
+    },
+    "22": {
+        "title": "Direct object pronouns",
+        "description": "lo/la/los/las replace the thing. Example: lo veo (I see it)."
+    },
+    "23": {
+        "title": "Indirect object pronouns",
+        "description": "me/te/le mark to whom. Example: le doy el libro (I give the book to him)."
+    },
+    "24": {
+        "title": "Comparatives más / menos que",
+        "description": "More/less than. Example: el perro es más grande que el gato."
+    },
+    "25": {
+        "title": "Superlative el más",
+        "description": "The most: el/la más + adjective. Example: la montaña más alta (the tallest mountain)."
+    },
+    "26": {
+        "title": "Question words",
+        "description": "Qué, quién, dónde, cuándo, por qué, cómo — always with an accent in questions."
+    },
+    "27": {
+        "title": "Por vs para",
+        "description": "Por = cause, through, exchange; para = purpose, destination. Example: gracias por todo; esto es para ti."
+    },
+    "28": {
+        "title": "Tener expressions",
+        "description": "Tener hambre/sed/miedo/años: to be hungry/thirsty/afraid/X years old. Example: tengo hambre."
+    },
+    "29": {
+        "title": "Hace + weather",
+        "description": "Weather uses hacer. Example: hace frío (it's cold), hace sol (it's sunny)."
+    },
+    "30": {
+        "title": "Telling time",
+        "description": "Es la una; son las dos/tres… Example: son las tres y media (it's half past three)."
+    },
+    "31": {
+        "title": "Demonstratives este / ese / aquel",
+        "description": "This, that, that over there — agree in gender. Example: este libro, esa casa."
+    },
+    "32": {
+        "title": "Affirmative tú commands",
+        "description": "Drop the -s of the tú form. Example: ¡habla! (speak!), ¡come! (eat!)."
+    },
+    "33": {
+        "title": "Muy vs mucho",
+        "description": "Muy + adjective (muy alto); mucho + noun or after verb (mucha agua, trabaja mucho)."
+    },
+    "34": {
+        "title": "También / tampoco",
+        "description": "Also / neither. Example: yo también (me too), yo tampoco (me neither)."
+    },
+    "35": {
+        "title": "Saber vs conocer",
+        "description": "Saber = facts and skills; conocer = people and places. Example: sé nadar; conozco Madrid."
+    },
+    "36": {
+        "title": "Future with ir a",
+        "description": "Going to: ir a + infinitive. Example: voy a viajar (I am going to travel)."
+    },
+    "37": {
+        "title": "Acabar de",
+        "description": "Just did: acabar de + infinitive. Example: acabo de comer (I just ate)."
+    },
+    "38": {
+        "title": "Hay que + infinitive",
+        "description": "Impersonal obligation: one must. Example: hay que estudiar (one must study)."
+    },
+    "39": {
+        "title": "Desde / hasta",
+        "description": "From / until, for time and space. Example: desde la mañana hasta la noche."
+    },
+    "40": {
+        "title": "Antes de / después de",
+        "description": "Before / after + infinitive. Example: antes de dormir (before sleeping)."
+    }
+}
