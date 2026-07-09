@@ -13,7 +13,8 @@ import { offerWords, resolveSegments } from "../ai/segments";
 import { buildVocabPlan, getImmersionLevel, planCountsFor, recordExposure } from "./learning";
 import { chargeForAi } from "./billing";
 import { sceneBrief, wordEntriesFor } from "./scene";
-import { applyProgress, isChapterTurnReady } from "./quests";
+import { applyProgress, failObjective, isChapterTurnReady } from "./quests";
+import { narrateQuestBeat } from "./story";
 
 const RECENT_MESSAGES = 12;
 const MEMORY_BUDGET = 8;
@@ -180,7 +181,7 @@ export async function sendDialogue(
         recordExposure(userId, segments.flatMap((s) => (s.t === "vocab" ? [s.wordId] : []))),
     ]);
 
-    // quest progress: first contact + any persuade objective the AI judged achieved
+    // quest progress: first contact + persuade objectives the AI judged won or lost
     const questUpdates: QuestUpdate[] = await applyProgress(story, {
         kind: "talkTo",
         targetCharacterId: character.id,
@@ -199,14 +200,42 @@ export async function sendDialogue(
             characterId: character.id,
             mapId: story.currentMapId,
         });
+    } else if (reply.objectiveFailed && objectiveKeys.has(reply.objectiveFailed)) {
+        const refused = objectiveKeys.get(reply.objectiveFailed)!;
+        questUpdates.push(...await failObjective(story, refused.id));
+        await db.insert(events).values({
+            storyId: story.id,
+            kind: "refusal",
+            summary: `${character.name} refused ${story.playerName} once and for all: ${refused.description}`,
+            characterId: character.id,
+            mapId: story.currentMapId,
+        });
+    }
+
+    // a resolved quest earns a line in the book itself
+    let beat = null;
+    const resolved = questUpdates.find((u) => u.questCompleted || u.failed);
+    if (resolved) {
+        try {
+            const beatResult = await narrateQuestBeat(
+                userId, story,
+                resolved.failed
+                    ? `Speaking with ${character.name}, the hero's quest "${resolved.questTitle}" was lost — the refusal was final. Mark the setback with warmth; the road bends but goes on.`
+                    : `Speaking with ${character.name}, the hero completed the quest "${resolved.questTitle}".`,
+            );
+            beat = beatResult.passage;
+        } catch {
+            // the toast still tells the player; the book catches up next beat
+        }
     }
 
     return {
         reply: { id: replyRow.id, speaker: "character", segments },
         mood: reply.mood,
         affinity: newAffinity,
-        words: await wordEntriesFor([segments]),
+        words: await wordEntriesFor([segments, ...(beat ? [beat.segments] : [])]),
         questUpdates,
+        beat,
         chapterTurnReady: await isChapterTurnReady(story),
     };
 }

@@ -1,9 +1,9 @@
 import "server-only";
 import { db } from "@/db";
 import {
-    characters, questObjectives, quests, type Story,
+    characters, enemies, questObjectives, quests, type QuestObjective, type Story,
 } from "@/db/schema";
-import type { QuestUpdate, QuestView } from "@/game/payloads";
+import type { ObjectiveTag, QuestUpdate, QuestView } from "@/game/payloads";
 import { and, asc, eq, inArray } from "drizzle-orm";
 
 export type ProgressTrigger =
@@ -79,12 +79,50 @@ export async function applyProgress(story: Story, trigger: ProgressTrigger): Pro
     return updates;
 }
 
+/**
+ * A persuasion was definitively refused: the objective and its quest fail.
+ * Nothing blocks the book — failed quests still let the chapter turn, the
+ * chronicle records the refusal, and the next chapter's plan reacts to it.
+ */
+export async function failObjective(story: Story, objectiveId: string): Promise<QuestUpdate[]> {
+    const objective = await db.query.questObjectives.findFirst({
+        where: eq(questObjectives.id, objectiveId),
+        with: { quest: true },
+    });
+    if (!objective || objective.quest.storyId !== story.id || objective.status !== "active") return [];
+
+    await db.update(questObjectives).set({ status: "failed" }).where(eq(questObjectives.id, objective.id));
+    await db.update(quests).set({ status: "failed" }).where(eq(quests.id, objective.questId));
+
+    return [{
+        questTitle: objective.quest.title,
+        objectiveDescription: objective.description,
+        questCompleted: false,
+        failed: true,
+    }];
+}
+
 /** all quests of the story's current arc stage are done → the page is ready to turn */
 export async function isChapterTurnReady(story: Story): Promise<boolean> {
     const stageQuests = await db.query.quests.findMany({
         where: and(eq(quests.storyId, story.id), eq(quests.arcStage, story.arcStage)),
     });
     return stageQuests.length > 0 && stageQuests.every((q) => q.status !== "active");
+}
+
+/** the label/tag shown beside each objective; boss battles get their crown */
+function objectiveTag(objective: QuestObjective, bossEnemyIds: Set<string>): ObjectiveTag {
+    switch (objective.kind) {
+        case "talkTo": return { label: "Meet", icon: "💬" };
+        case "persuade": return { label: "Convince", icon: "🎭" };
+        case "defeat":
+            return objective.targetEnemyId && bossEnemyIds.has(objective.targetEnemyId)
+                ? { label: "Boss", icon: "👑" }
+                : { label: "Battle", icon: "⚔️" };
+        case "visit": return { label: "Explore", icon: "🧭" };
+        case "learnWords": return { label: "Words", icon: "✨" };
+        default: return { label: "Deed", icon: "📜" };
+    }
 }
 
 export async function getQuestViews(storyId: string): Promise<QuestView[]> {
@@ -95,10 +133,19 @@ export async function getQuestViews(storyId: string): Promise<QuestView[]> {
     });
 
     const giverIds = [...new Set(rows.flatMap((q) => (q.giverCharacterId ? [q.giverCharacterId] : [])))];
-    const givers = giverIds.length > 0
-        ? await db.query.characters.findMany({ where: inArray(characters.id, giverIds) })
-        : [];
+    const enemyIds = [...new Set(rows.flatMap((q) =>
+        q.objectives.flatMap((o) => (o.targetEnemyId ? [o.targetEnemyId] : []))))];
+
+    const [givers, targetEnemies] = await Promise.all([
+        giverIds.length > 0
+            ? db.query.characters.findMany({ where: inArray(characters.id, giverIds) })
+            : Promise.resolve([]),
+        enemyIds.length > 0
+            ? db.query.enemies.findMany({ where: inArray(enemies.id, enemyIds) })
+            : Promise.resolve([]),
+    ]);
     const giverName = new Map(givers.map((c) => [c.id, c.name]));
+    const bossEnemyIds = new Set(targetEnemies.filter((e) => e.tier === "boss").map((e) => e.id));
 
     return rows.map((q) => ({
         id: q.id,
@@ -109,6 +156,8 @@ export async function getQuestViews(storyId: string): Promise<QuestView[]> {
         objectives: q.objectives.map((o) => ({
             id: o.id,
             description: o.description,
+            kind: o.kind,
+            tag: objectiveTag(o, bossEnemyIds),
             status: o.status,
             progress: o.progress,
             targetCount: o.targetCount,

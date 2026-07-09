@@ -85,6 +85,11 @@ export async function appendVictoryPassage(story: Story, segments: Segment[]): P
     return appendPassage(story, "narration", segments);
 }
 
+/** the book acknowledges a quest resolving (free, like victory prose) */
+export async function narrateQuestBeat(userId: string, story: Story, focus: string): Promise<NarrationResult> {
+    return narrate(userId, story, "questBeat", focus);
+}
+
 /* ------------------------------------------------------------------ */
 /* narration moments                                                   */
 /* ------------------------------------------------------------------ */
@@ -95,7 +100,7 @@ async function narrate(
     kind: NarrationKind,
     focus: string,
 ): Promise<NarrationResult> {
-    await chargeForAi(userId, kind === "victory" ? "victory" : "narration");
+    await chargeForAi(userId, kind === "victory" ? "victory" : kind === "questBeat" ? "questBeat" : "narration");
     const immersionLevel = await getImmersionLevel(userId, story.id);
     const plan = await buildVocabPlan(userId, story, planCountsFor(immersionLevel, "narration"));
     const offer = offerWords(plan);
@@ -112,7 +117,11 @@ async function narrate(
     });
 
     const segments = resolveSegments(result.passage, offer);
-    const passage = await appendPassage(story, kind === "inspect" ? "discovery" : "narration", segments);
+    const passage = await appendPassage(
+        story,
+        kind === "inspect" ? "discovery" : kind === "questBeat" ? "event" : "narration",
+        segments,
+    );
 
     if (result.eventSummary) {
         await db.insert(events).values({
@@ -143,7 +152,16 @@ export async function handleArrival(userId: string, story: Story, mapId: string)
         where: and(eq(events.storyId, story.id), eq(events.kind, "arrival"), eq(events.mapId, mapId)),
     });
     if (alreadyVisited) {
-        return questUpdates.length === 0 ? null : {
+        if (questUpdates.length === 0) return null;
+        const completedQuest = questUpdates.find((u) => u.questCompleted);
+        if (completedQuest) {
+            const beat = await narrateQuestBeat(
+                userId, story,
+                `Reaching ${map.name} completed the quest "${completedQuest.questTitle}".`,
+            );
+            return { ...beat, questUpdates: [...questUpdates, ...beat.questUpdates] };
+        }
+        return {
             passage: null,
             words: [],
             questUpdates,

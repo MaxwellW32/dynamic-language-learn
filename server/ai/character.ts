@@ -67,7 +67,8 @@ AFTER YOUR REPLY, assess honestly:
 - "mood": your mood now, one or two words.
 - "memory": if this exchange gave you something durable to remember about the hero (a promise, a kindness, a secret shared, an insult), write it in one sentence from YOUR point of view with importance 1–10; else null.
 - "affinityDelta": -5..5, how this exchange moved your feelings. Usually -1..1; big only for big moments.
-- "objectiveAchieved": ${input.objectivesBrief ? `if the hero has now clearly achieved one of these, give its key, else null. Judge strictly — the character must genuinely be convinced, not merely asked:\n${input.objectivesBrief}` : "null (nothing at stake in this conversation)."}`,
+- "objectiveAchieved": ${input.objectivesBrief ? `if the hero has now clearly achieved one of these, give its key, else null. Judge strictly — the character must genuinely be convinced, not merely asked:\n${input.objectivesBrief}` : "null (nothing at stake in this conversation)."}
+- "objectiveFailed": ${input.objectivesBrief ? `an objective key ONLY if you have just refused it so definitively that no future conversation could change your mind (a deep insult, a betrayal revealed, a line crossed). Reluctance, doubt, or "not yet" is NOT failure — those stay null. Failing an objective is rare and dramatic.` : "null."}`,
         input: `${input.story.playerName} says: "${input.playerMessage}"\n\nMOST RECENT EXCHANGES:\n${input.recentMessages}`,
     });
 }

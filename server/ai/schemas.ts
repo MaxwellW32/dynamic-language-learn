@@ -107,6 +107,8 @@ export const characterReplySchema = z.object({
     affinityDelta: z.number().int().min(-5).max(5),
     /** objective key from the brief if the player just clearly achieved it */
     objectiveAchieved: z.string().nullable(),
+    /** objective key if this character has now DEFINITIVELY refused — no future conversation could fix it */
+    objectiveFailed: z.string().nullable(),
 });
 
 export const chapterTransitionSchema = z.object({

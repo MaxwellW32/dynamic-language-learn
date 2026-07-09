@@ -81,6 +81,11 @@ export type PassageView = {
     speaker?: string;
 };
 
+export type ObjectiveTag = {
+    label: string;
+    icon: string;
+};
+
 export type QuestView = {
     id: string;
     title: string;
@@ -90,7 +95,9 @@ export type QuestView = {
     objectives: {
         id: string;
         description: string;
-        status: "active" | "completed";
+        kind: "talkTo" | "persuade" | "defeat" | "visit" | "learnWords" | "custom";
+        tag: ObjectiveTag;
+        status: "active" | "completed" | "failed";
         progress: number;
         targetCount: number;
     }[];
@@ -113,6 +120,8 @@ export type QuestUpdate = {
     questTitle: string;
     objectiveDescription: string;
     questCompleted: boolean;
+    /** a persuasion definitively refused — the quest is lost, the story moves on */
+    failed?: boolean;
 };
 
 export type MessageView = {
@@ -135,6 +144,8 @@ export type DialogueTurnResult = {
     affinity: number;
     words: WordEntry[];
     questUpdates: QuestUpdate[];
+    /** narration written into the book when this exchange resolved a quest */
+    beat: PassageView | null;
     chapterTurnReady: boolean;
 };
 

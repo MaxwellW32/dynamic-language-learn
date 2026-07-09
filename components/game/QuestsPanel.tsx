@@ -28,12 +28,16 @@ export function QuestsPanel() {
                         <p className="font-display leading-tight">
                             {quest.status === "completed" ? "✅" : quest.status === "failed" ? "🥀" : "✦"} {quest.title}
                             {quest.giverName && <span className="font-hand text-ink-faint text-base"> — for {quest.giverName}</span>}
+                            {quest.status === "failed" && <span className="font-hand text-ember-deep text-base"> — lost</span>}
                         </p>
                         {quest.status === "active" && (
                             <ul className="mt-0.5 grid gap-0.5">
                                 {quest.objectives.map((objective) => (
-                                    <li key={objective.id} className={`text-sm flex gap-1.5 ${objective.status === "completed" ? "line-through text-ink-faint" : "text-ink-soft"}`}>
-                                        <span>{objective.status === "completed" ? "☑" : "☐"}</span>
+                                    <li key={objective.id} className={`text-sm flex items-baseline gap-1.5 ${objective.status === "completed" ? "line-through text-ink-faint" : objective.status === "failed" ? "line-through text-ember-deep/70" : "text-ink-soft"}`}>
+                                        <span>{objective.status === "completed" ? "☑" : objective.status === "failed" ? "☒" : "☐"}</span>
+                                        <span className="shrink-0 rounded-sm border border-wood/40 bg-parchment-dark/60 px-1 text-[10px] font-display tracking-wide text-ink-soft whitespace-nowrap">
+                                            {objective.tag.icon} {objective.tag.label}
+                                        </span>
                                         <span>
                                             {objective.description}
                                             {objective.targetCount > 1 && ` (${objective.progress}/${objective.targetCount})`}

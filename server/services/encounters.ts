@@ -176,13 +176,14 @@ export async function submitAnswer(
         try {
             const immersionLevel = await getImmersionLevel(userId, story.id);
             const offer = offerWords(await buildVocabPlan(userId, story, { introduce: 0, review: 2 }));
+            const completedQuests = questUpdates.filter((u) => u.questCompleted).map((u) => `"${u.questTitle}"`);
             const narration = await generateNarration({
                 story,
                 kind: "victory",
                 sceneBrief: await sceneBrief(story),
                 chronicleBrief: await chronicleBrief(story.id),
                 recentPassages: "(mid-battle)",
-                focus: `The hero just defeated ${encounter.enemy.name} (${encounter.enemy.description}).`,
+                focus: `The hero just defeated ${encounter.enemy.name} (${encounter.enemy.description}).${completedQuests.length > 0 ? ` This completed the quest ${completedQuests.join(" and ")} — let the moment carry that weight.` : ""}`,
                 offer,
                 immersionLevel,
             });

@@ -27,6 +27,7 @@ export const SPARK_COSTS = {
     dialogue: 2,      // one character reply
     chapterTurn: 6,   // transition + next stage's quest plan
     victory: 0,       // victory prose is a reward, on the house
+    questBeat: 0,     // quest resolutions written into the book — also on the house
     speak: 1,         // one NPC line read aloud
     transcribe: 0,    // mic input — cheap, keep the mic frictionless
 } as const;

@@ -10,7 +10,7 @@ import { SegmentText } from "./SegmentText";
 import { showQuestUpdates } from "./questToasts";
 import { useRecorder, useSpeaker } from "./useVoice";
 import {
-    chapterTurnReadyAtom, dialogueAtom, mergeWordsAtom, sceneAtom, storyInfoAtom,
+    chapterTurnReadyAtom, dialogueAtom, mergeWordsAtom, passagesAtom, sceneAtom, storyInfoAtom,
 } from "./state";
 
 /**
@@ -21,6 +21,7 @@ export function DialoguePanel() {
     const story = useAtomValue(storyInfoAtom);
     const [dialogue, setDialogue] = useAtom(dialogueAtom);
     const setScene = useSetAtom(sceneAtom);
+    const setPassages = useSetAtom(passagesAtom);
     const mergeWords = useSetAtom(mergeWordsAtom);
     const setChapterTurnReady = useSetAtom(chapterTurnReadyAtom);
 
@@ -61,6 +62,10 @@ export function DialoguePanel() {
                     characters: scene.characters.map((c) =>
                         c.id === character.id ? { ...c, mood: result.mood, affinity: result.affinity } : c),
                 }));
+                if (result.beat) {
+                    const beat = result.beat;
+                    setPassages((prev) => [...prev, beat]);
+                }
                 setChapterTurnReady(result.chapterTurnReady);
                 showQuestUpdates(result.questUpdates);
             } catch (error) {

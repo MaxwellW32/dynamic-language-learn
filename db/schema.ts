@@ -23,7 +23,7 @@ export const enemyStatusEnum = pgEnum("enemy_status", ["alive", "defeated"]);
 export const encounterStatusEnum = pgEnum("encounter_status", ["active", "won", "retreated"]);
 export const questStatusEnum = pgEnum("quest_status", ["active", "completed", "failed"]);
 export const objectiveKindEnum = pgEnum("objective_kind", ["talkTo", "persuade", "defeat", "visit", "learnWords", "custom"]);
-export const objectiveStatusEnum = pgEnum("objective_status", ["active", "completed"]);
+export const objectiveStatusEnum = pgEnum("objective_status", ["active", "completed", "failed"]);
 export const speakerEnum = pgEnum("speaker", ["player", "character"]);
 export const passageKindEnum = pgEnum("passage_kind", ["narration", "dialogue", "event", "discovery"]);
 
