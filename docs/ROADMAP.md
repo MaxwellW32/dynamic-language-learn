@@ -19,6 +19,11 @@ Everything below already has its foundations in place; each item names them.
 - **Low-balance email** at ~20% of last top-up (Resend or nodemailer — nodemailer already
   configured for auth emails). In-app badge nudge already exists (`BillingBadge`).
 - **Auto top-up** (explicit opt-in only).
+- **Margin (addressed, re-verify at launch)**: credits users now run on `AI_MODEL_CREDITS`
+  (gpt-5.4, ~1.2–1.5¢/turn with caching) at 2 sparks/turn, with bundles at 400/$4.99,
+  1000/$9.99, 2500/$19.99 (~1–1.25¢/spark) → roughly 25–50% gross margin plus breakage;
+  BYOK users get gpt-5.5 on their own key. Re-check real usage numbers against the
+  `credit_ledger` + OpenAI dashboard before launch and tune `SPARK_COSTS`/bundles.
 - **Refund-on-failure**: 1-spark tasks currently charge before generation
   (`chargeForAi` call sites in services); a failed AI call eats the spark. Add a refund via
   `grantSparks(userId, cost, "refund-<reason>")` in the catch paths. Forge is already safe

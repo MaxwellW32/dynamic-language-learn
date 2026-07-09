@@ -17,11 +17,14 @@ export async function openaiForRequest(): Promise<OpenAI> {
 }
 
 /**
- * Two model tiers: the flagship carries everything narrative (dialogue,
- * narration, world forge — where story understanding and long context pay
- * off); the fast tier handles mechanical fill-in work (example sentences).
+ * Model tiers:
+ * - BYOK players run the full flagship on their own key.
+ * - Credits (sparks) players run the half-price flagship-class model — still
+ *   strong prose, and it's what makes spark bundles profitable.
+ * - The fast tier handles mechanical fill-in work (example sentences).
  */
 export const AI_MODEL = process.env.OPENAI_MODEL ?? "gpt-5.5";
+export const AI_MODEL_CREDITS = process.env.OPENAI_MODEL_CREDITS ?? "gpt-5.4";
 export const AI_MODEL_FAST = process.env.OPENAI_MODEL_FAST ?? "gpt-5.4-mini";
 
 /**
@@ -38,13 +41,15 @@ export async function generate<S extends z.ZodType>(opts: {
 }): Promise<z.infer<S>> {
     const { task, instructions, input, schema } = opts;
     const started = Date.now();
-    const client = await openaiForRequest();
+    const byok = await getByokKey();
+    const client = byok ? new OpenAI({ apiKey: byok }) : openai;
+    const model = opts.model ?? (byok ? AI_MODEL : AI_MODEL_CREDITS);
 
     let lastError: unknown;
     for (let attempt = 0; attempt < 2; attempt++) {
         try {
             const response = await client.responses.parse({
-                model: opts.model ?? AI_MODEL,
+                model,
                 instructions,
                 input,
                 text: { format: zodTextFormat(schema, task) },

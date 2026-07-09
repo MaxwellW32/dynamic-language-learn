@@ -20,7 +20,8 @@ OpenAI (structured outputs, TTS, transcription) · Tailwind 4 · Jotai
 
 1. `.env.local` needs: `DATABASE_URL`, `OPENAI_API_KEY`, `AUTH_SECRET`,
    `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET` and/or `EMAIL`/`EMAIL_PASS` (Gmail for magic links).
-   Optional: `OPENAI_MODEL` (narrative tier, defaults to `gpt-5.5`) and
+   Optional: `OPENAI_MODEL` (BYOK/flagship tier, defaults to `gpt-5.5`),
+   `OPENAI_MODEL_CREDITS` (sparks tier, defaults to `gpt-5.4`), and
    `OPENAI_MODEL_FAST` (mechanical tier, defaults to `gpt-5.4-mini`).
 2. Apply the schema — **note:** this will also offer to drop the legacy prototype tables
    (`books`, `chapters`) and two old `users` columns; confirm knowingly:

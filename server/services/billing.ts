@@ -16,12 +16,16 @@ import { creditLedger, users, type User } from "@/db/schema";
 
 export const BYOK_COOKIE = "wb_byok";
 
-/** sparks per AI task — the one place pricing lives */
+/**
+ * Sparks per AI task — the one place pricing lives. Calibrated against
+ * gpt-5.4 (the credits tier) so bundles sell at a real margin: a dialogue
+ * turn costs ~1.2–1.5¢ to serve and 2 sparks retail at ~1.7–2.5¢.
+ */
 export const SPARK_COSTS = {
-    forge: 25,        // creating a whole world (~4 flagship calls)
-    narration: 1,     // arrivals, inspections, quest beats
-    dialogue: 1,      // one character reply
-    chapterTurn: 3,   // transition + next stage's quest plan
+    forge: 30,        // creating a whole world (~4 model calls)
+    narration: 2,     // arrivals, inspections, quest beats
+    dialogue: 2,      // one character reply
+    chapterTurn: 6,   // transition + next stage's quest plan
     victory: 0,       // victory prose is a reward, on the house
     speak: 1,         // one NPC line read aloud
     transcribe: 0,    // mic input — cheap, keep the mic frictionless
@@ -29,7 +33,8 @@ export const SPARK_COSTS = {
 
 export type SparkReason = keyof typeof SPARK_COSTS;
 
-export const STARTER_SPARKS = 50;
+/** enough for the forge plus a real first session (~35 story moments) */
+export const STARTER_SPARKS = 100;
 export const LOW_SPARKS_THRESHOLD = 10;
 
 export async function getByokKey(): Promise<string | null> {

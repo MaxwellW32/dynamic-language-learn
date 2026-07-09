@@ -308,9 +308,11 @@ Every AI moment costs real money, so onboarding (`/welcome`) makes new users cho
   **append-only `credit_ledger`** plus a cached `users.sparks` column that is only ever changed in
   the same transaction as a ledger row; spending is atomic
   (`UPDATE … WHERE sparks >= cost RETURNING`), so concurrent actions can never overdraw. Prices
-  per task live in one place (`SPARK_COSTS` in `server/services/billing.ts`: page of story 1,
-  dialogue turn 1, chapter turn 3, world forge 25 — charged at story creation so forge *retries*
-  are free; victory prose and mic input are free). New credits users get a one-time 50-spark
+  per task live in one place (`SPARK_COSTS` in `server/services/billing.ts`: page of story 2,
+  dialogue turn 2, chapter turn 6, world forge 30 — charged at story creation so forge *retries*
+  are free; victory prose and mic input are free). Credits users are served by the half-price
+  flagship-class model (`AI_MODEL_CREDITS`, default gpt-5.4) so bundles carry a real margin;
+  BYOK users get the full flagship on their own key. New credits users get a one-time 100-spark
   starter gift (guarded by ledger reason). The UI shows the balance everywhere
   (`BillingBadge`), nudges below 10 sparks, and `/sparks` lists top-up bundles (Stripe-ready
   scaffold) and the ledger.

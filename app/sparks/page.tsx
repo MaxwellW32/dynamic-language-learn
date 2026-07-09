@@ -9,9 +9,9 @@ import { recentLedger, SPARK_COSTS } from "@/server/services/billing";
 
 /** top-up bundles — wire these to Stripe Checkout when payments go live */
 const BUNDLES = [
-    { sparks: 500, price: "$4.99", note: "a few evenings of adventuring" },
-    { sparks: 1200, price: "$9.99", note: "most popular", featured: true },
-    { sparks: 3000, price: "$19.99", note: "a whole saga" },
+    { sparks: 400, price: "$4.99", note: "a few evenings of adventuring" },
+    { sparks: 1000, price: "$9.99", note: "most popular", featured: true },
+    { sparks: 2500, price: "$19.99", note: "a whole saga" },
 ];
 
 const REASON_LABELS: Record<string, string> = {

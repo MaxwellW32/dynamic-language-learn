@@ -107,7 +107,7 @@ export function WelcomeChoice({
                 <h2 className="font-display text-xl">✨ Wordbound sparks</h2>
                 <p className="text-sm text-ink-soft leading-relaxed flex-1">
                     The simple way: we carry the lantern. Story moments spend sparks
-                    (a page of story ≈ 1 spark, forging a whole new world ≈ 25). Start
+                    (a page of story ≈ 2 sparks, forging a whole new world ≈ 30). Start
                     with <strong>{starterSparks} free sparks</strong>, top up whenever you
                     like, and we&apos;ll nudge you before you run low.
                 </p>
