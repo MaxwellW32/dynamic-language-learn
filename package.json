@@ -8,10 +8,19 @@
     "start": "next start --port 3011",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "test": "tsx --conditions=react-server --test tests/*.test.ts",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
-    "db:seed": "tsx scripts/seed.ts",
-    "db:wipe": "tsx scripts/wipe.ts"
+    "db:status": "tsx scripts/dbStatus.ts",
+    "db:reset-game": "tsx scripts/resetGame.ts",
+    "dict:download": "tsx scripts/dict/download.ts",
+    "dict:import": "tsx scripts/dict/import.ts",
+    "dict:curate": "tsx scripts/dict/curate.ts",
+    "test:seed": "tsx scripts/testUsers.ts seed",
+    "test:clean": "tsx scripts/testUsers.ts clean",
+    "test:status": "tsx scripts/testUsers.ts status",
+    "test:books": "tsx scripts/testUsers.ts books",
+    "test:shot": "node scripts/testBrowser.mjs"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.1",
@@ -29,6 +38,8 @@
     "react-dom": "19.2.3",
     "react-hot-toast": "^2.6.0",
     "server-only": "^0.0.1",
+    "stripe": "^22.6.2",
+    "three": "^0.186.1",
     "uuid": "^13.0.0",
     "zod": "^4.3.6"
   },
@@ -39,6 +50,7 @@
     "@types/pg": "^8.16.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/three": "^0.186.0",
     "drizzle-kit": "^0.31.8",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",

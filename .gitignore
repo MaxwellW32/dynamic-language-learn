@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# downloaded dictionary sources (fetched by scripts/dict/download.ts)
+/data/dict-raw/
+
+# screenshots from the test browser
+/.test-shots/

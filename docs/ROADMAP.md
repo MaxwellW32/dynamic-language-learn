@@ -1,82 +1,89 @@
-# Roadmap — deferred work, ready for pickup
+# Roadmap — what is not built yet, and where it would go
 
-Plans agreed with the owner but intentionally not yet built. Read
-[ARCHITECTURE.md](ARCHITECTURE.md) first — it explains the system these plug into.
-Everything below already has its foundations in place; each item names them.
+Read [ARCHITECTURE.md](ARCHITECTURE.md) first. Everything here has its foundation in place; each
+item names it. They are ordered by how much they matter before other people are let in.
 
-## 1. Payments (highest priority before store launch)
+## 1. Before anyone else plays
 
-- **Stripe Checkout for spark bundles.** `/sparks` (app/sparks/page.tsx) already renders the
-  bundles (500/$4.99, 1200/$9.99, 3000/$19.99) with disabled buttons. Build: a checkout-session
-  server action per bundle + a `/api/stripe/webhook` route handler that, on
-  `checkout.session.completed`, calls the existing `grantSparks(userId, amount, "topup-<bundle>")`
-  in `server/services/billing.ts` (append-only ledger + atomic cached balance — do NOT write
-  `users.sparks` directly). Needs `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` env vars.
-  Idempotency: key grants on the Stripe event id (store it in the ledger `reason` or a new column).
-- **Google Play**: the app will ship as a TWA. Digital goods sold *inside* a Play app must use
-  Play Billing — v1 plan is web-only top-ups (Stripe) with the app consuming balance; Play Billing
-  products for bundles can come later. BYOK mode sidesteps store billing entirely.
-- **Low-balance email** at ~20% of last top-up (Resend or nodemailer — nodemailer already
-  configured for auth emails). In-app badge nudge already exists (`BillingBadge`).
-- **Auto top-up** (explicit opt-in only).
-- **Margin (addressed, re-verify at launch)**: credits users now run on `AI_MODEL_CREDITS`
-  (gpt-5.4, ~1.2–1.5¢/turn with caching) at 2 sparks/turn, with bundles at 400/$4.99,
-  1000/$9.99, 2500/$19.99 (~1–1.25¢/spark) → roughly 25–50% gross margin plus breakage;
-  BYOK users get gpt-5.5 on their own key. Re-check real usage numbers against the
-  `credit_ledger` + OpenAI dashboard before launch and tune `SPARK_COSTS`/bundles.
-- **Refund-on-failure**: 1-spark tasks currently charge before generation
-  (`chargeForAi` call sites in services); a failed AI call eats the spark. Add a refund via
-  `grantSparks(userId, cost, "refund-<reason>")` in the catch paths. Forge is already safe
-  (charged at story creation; retries free).
+- **Choose a payment processor and run a real payment.** The wallet, the ledger, the packages
+  (pay $6 → $5 credit) and exactly-once crediting are built and tested. `server/payments/stripe.ts`
+  implements Stripe Checkout and its webhook but **has never run against Stripe**: there were no
+  keys. If Stripe is not available to the business, write a second provider beside it
+  (`server/payments/index.ts` is the interface: `startCheckout`, `readWebhook`) — everything
+  downstream of `completeTopup` stays as it is. Until a provider is configured, `/wallet` shows the
+  packages with their buttons disabled.
+- **Rate limits.** Spending is self-limiting for wallet players (they pay), but the starter gift
+  ($0.50 per new account) can be farmed, and speech transcription accepts uploads. Add a per-user
+  limit on model calls per minute and per day in `server/ai/client.ts` (`openDoor` is where every
+  call already stops to check the wallet), and consider granting the gift only after the first
+  top-up or to verified emails.
+- **A production build on the server, and a phone in the hand.** The engine adapts its own quality
+  to the frame rate it measures, but it has only ever been run in desktop Chrome. Walk through a
+  book on a mid-range Android phone and on an iPhone before promising anything about either.
+- **Prices drift.** `server/ai/pricing.ts` holds the provider's prices as of September 2026. An
+  unknown model is charged at the dearest known price, so a new model can never be free, but the
+  table should be checked whenever the default models change.
+- **Refund a failed call?** A model call that fails validation twice has been paid for and is
+  charged. That is honest but unkind. If it proves common in `ai_usage` (`ok = false`), refund with
+  `grant(userId, micros, "refund", usageId)`.
 
-## 2. Vocabulary content pipeline
+## 2. The world
 
-- **AI pack forge**: user types any language (or theme, e.g. "Italian for cooking") → ONE AI call
-  generates a 100–200 word starter pack → saved as `vocab_packs`/`vocab_words` rows
-  (`createdBy` = user, `isBuiltIn` = false) — then it behaves identically to curated packs
-  (SRS, challenges, tracking). Schema already supports it. Add a "Forge a new pack" option in
-  `components/story/NewStoryForm.tsx` and a prompt module in `server/ai/` (follow the
-  `examples.ts` pattern; use `AI_MODEL_FAST`? No — pack quality matters, use flagship).
-  Charge sparks for it (add a `packForge` entry to `SPARK_COSTS`).
-- **Phrase harvesting ("Gleanings")**: AI dialogue already emits ad-hoc `phrase` segments.
-  Add a "collect" button on the phrase tap-card (`components/game/SegmentText.tsx`) → server
-  action normalizes it into a per-user per-language "Gleanings" pack (auto-created
-  `vocab_packs` row) so it enters the SRS. Dedupe by normalized term.
-- **Curated packs**: more languages = drop `dictionary.json` into `data/vocab/<native>__<target>/`
-  + add a `PACKS` entry in `scripts/seed.ts` (seed is additive — new words in an existing file are
-  appended on re-run). Prefer frequency-ordered lists; `sortIndex` is the teaching order.
-  Consider CEFR-tiered packs per language ("Starter / Wayfarer / Scholar").
-- **Grammar packs**: `data/vocab/*/grammar.json` holds 40 curated grammar lessons per language
-  (title + description), currently unused by gameplay. Integration idea: a `grammar_lessons`
-  table mirroring vocab packs; the narrator gets "one grammar point to model naturally" in its
-  brief at Speaker+ immersion levels; a grammar challenge type quizzes the pattern.
-  Dialect note: folder names are deliberately dialect-free (`english__japanese`) — dialect
-  belongs on the pack row (`targetDialect`) if a dialect-specific pack is ever wanted.
+- **Interiors.** Buildings are scenery with a name. An inn one can walk into is a fourth region
+  kind (`interior`): a small walled layout in `game/worldgen/layout.ts`, a door as a gate.
+- **Companions.** A character who walks with the hero needs `characters.regionId` to be null while
+  travelling, a follow behaviour in `engine/index.ts` beside `moveCharacters`, and their sheet in
+  every narrator prompt.
+- **Day turning to night.** Each region has one fixed hour. `engine/palette.ts` already separates
+  place from light; blending between two `Daylight` entries over time is the missing piece.
+- **Sound.** There is speech but no music and no footsteps. WebAudio, a few seconds of generated
+  ambience per biome, started on the first tap.
+- **More of everything the engine can build.** New creature kinds (`engine/creatures.ts`),
+  landmark kinds (`engine/props.ts` + `LANDMARK_KINDS`), building kinds, biomes. Each is one
+  function and one entry in `game/looks.ts`; the storyteller starts using them at once.
 
-## 3. Learning & gameplay
+## 3. The story
 
-- **More challenge types** (registry at `game/challenges/index.ts` — each type = one
-  generator + grader + renderer in `components/game/ChallengeView.tsx`): listening
-  (play TTS of the word via `/api/voice/speak` plumbing → pick/type), pronunciation
-  (mic + transcribe → compare), synonyms/antonyms (needs those fields on `vocab_words`),
-  translation (full sentence), context clues, crosswords.
-- **Companion NPCs**: `characters.isCompanion` + nullable `mapId` already modeled; needs
-  scene/brief inclusion when travelling, and forge/quest hooks.
-- **Rolling conversation summaries**: `conversations.summary` column exists but is never
-  refreshed; add a cheap summarize pass (AI_MODEL_FAST) every ~30 messages so very long
-  friendships stay in context.
-- **Immersion preference**: the ladder (`getImmersionLevel` in `server/services/learning.ts`,
-  guidance in `server/ai/segments.ts`) is retention-driven; optionally add a user preference
-  ("cozy / brisk") that shifts the level ±1.
-- **World variety**: more handcrafted map templates + alternate `WORLD_BLUEPRINT`s in
-  `game/mapTemplates.ts` (seaside, mountain, city) — geometry stays authored, forge AI fills.
+- **Items.** The hero owns nothing. An `items` table, a "give" and "take" effect in the director's
+  output, and a satchel tab in the journal would let promises be kept with things.
+- **Endings that differ.** The book ends when the last chapter turns. The threads a player
+  resolved, dropped or never found are all in `threads`; the final chapter prompt could be given
+  them and asked for the ending this reader earned.
+- **Characters who move.** The director can change what a character wants but not where they
+  stand. Add `move` to its shifts, with the target chosen from free `npcSlots` of the layout.
+- **Promises kept.** A character remembers a promise (`memories.kind = "promise"`), and the two
+  newest are in every prompt, but nothing ever sets `memories.resolved`. Add `keptPromise` to the
+  character's turn (the key of a promise shown in the brief), mark it, and let affinity rise.
+- **Two tabs at once.** `turnChapter` checks that the chapter is ready and then writes; the same
+  book open in two tabs could turn the page twice. Claim the turn first, as the forge and the
+  director do (a conditional `update … returning`).
 
-## 4. Polish
+## 4. Learning
 
-- Real artwork to replace emoji sprite tokens (`game/sprites.ts` maps spriteKey → asset;
-  swap emoji for image paths, keep the keys).
-- Drop cap currently decorates the first *loaded* passage, not the first of each chapter
-  (`components/game/Journal.tsx` StoryTab).
-- Push notifications via TWA for low balance / story events (needs service worker).
-- Rate limiting on AI actions (per-user, e.g. token bucket in Postgres or Redis) before
-  public launch.
+- **Grammar.** The book teaches words and whole sentences, never rules. One grammar point per
+  chapter, named in the bible, modelled by the narrator, asked about in battles.
+- **Speaking challenges in battle.** Built (`speaking` in `game/challenges/`), graded, and left out
+  of `TIER_CHALLENGES` and the study hall, because a microphone that fails mid-battle costs a
+  heart. Offer it as something the player switches on.
+- **Placement.** Players say where they are starting from. A two-minute placement battle would
+  know better.
+- **Sentences in the satchel.** `saved_phrases` exists; nothing writes to it yet. A "keep this
+  sentence" button beside a revealed translation, and a study mode that rebuilds kept sentences.
+- **More languages.** A language is an entry in `game/languages.ts`, a source in
+  `scripts/dict/sources.ts` and, for anything kaikki.org publishes, no new code.
+  A reader's language other than English needs dictionaries glossed in that language.
+
+## 5. Polish
+
+- **A faster forge.** A new book takes about 80 seconds, nearly all of it the model writing the
+  cast and the places (two calls of ~2,300 tokens side by side). To halve it: after the seed, one
+  short call writes a *roster* (every person, creature and landmark: name and one line), then
+  the details are written in three or four parallel calls that all see the roster, so the cast
+  still interlocks, and the opening is written beside them. `writeWorld` in
+  `server/ai/prompts/forge.ts` is the place. Or let the reader in once the home region is
+  written and finish the rest behind them.
+- The cover and the forge screen could show the book's own world as soon as its first region is
+  known.
+- Translations are shown beneath target-language lines until immersion level 3, then hidden behind
+  a tap. That switch should be the player's to set.
+- The journal's map is a list. The regions and their gates are a graph worth drawing.

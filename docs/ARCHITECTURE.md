@@ -1,356 +1,378 @@
-# Wordbound — Architecture & Modernization Plan
+# Wordbound — Architecture
 
-*An AI-powered interactive storybook language-learning RPG.*
+*A storybook you walk around inside, that teaches you its language.*
 
-This document records the analysis of the two prototypes (`dynamic-story`, `dynamic-language-learn`),
-the weaknesses found, the redesigned architecture, and the reasoning behind every major decision.
+A player creates a book. An AI storyteller forges a world for it; the player explores that world
+in 3D, befriends its characters, fights its creatures with words, and reads the story as it writes
+itself — with more and more of it in the language they are learning.
 
----
-
-## 1. What the prototypes were building
-
-Both projects share one vision, iterated twice:
-
-> The player opens a storybook and becomes its main character. An AI game master narrates a
-> persistent world — locations, characters, goals — stored in a database. Vocabulary from the
-> language the player is learning is woven naturally into narration and dialogue. "Combat" is a
-> language challenge. Conversations with NPCs feel alive, and the world remembers.
-
-**`dynamic-story` (Feb–Mar)** — first prototype. Books → chapters → sections; AI-generated
-locations (3-level hierarchy: location → place → area, with meter coordinates), an
-**`areaConnections` graph** (edges with travel descriptions) making areas navigable, characters
-with memories as string arrays, goals/sub-goals as the story spine, a Character.AI-style chat
-section, a pannable/zoomable map, and **AI-adjudicated travel** — the narrator model granted or
-denied the player's move requests in-fiction ("still fighting dragon boss"). Its narrator also
-emitted a typed `changes[]` mutation array (character/player/subGoal/chapter changes), an early
-multi-agent pipeline: quest-designer AI → narrator AI → chat AI. It had **no language-learning
-layer at all** and **no voice code** (the author's notes list "chat with characters (text/audio)"
-as a future plan).
-
-**`dynamic-language-learn` (Mar–Apr, current repo)** — second iteration. Same skeleton, plus the
-language layer: per-language-pair dictionary/grammar JSON files served from `public/`, a
-`translatableText` format so AI output can embed vocabulary tokens (`fw` = word from the user's
-pack, `gptWord` = ad-hoc word the AI introduces), click-to-reveal word popovers, a mastery map
-(1–10 per word) stored on the user row, and `gameMode` sections meant to spawn language challenges
-when a `defeat-character` sub-goal triggers (UI never implemented — renders `<p>gameMode</p>`).
-
-### What was genuinely good (and is kept)
-
-- **Structured AI output everywhere.** Every OpenAI call uses `responses.parse` with a zod schema
-  (`zodTextFormat`) and re-validates the result. This is the right foundation and is retained.
-- **The anti-hallucination instinct.** Prompts already say *"Do NOT invent ids. Only use provided
-  characterIds. Only use provided word ids."* The redesign makes this structural instead of
-  prompt-hoped.
-- **The `translatableText` idea** — story text as a sequence of segments where some segments are
-  vocabulary tokens — is excellent and becomes the `Segment[]` rich-text format.
-- **Goal pacing vocabulary** (introduction → rising-action → climax → falling-action → resolution)
-  survives as quest arc stages.
-- **Auth stack** (NextAuth v5 + Drizzle adapter, Google + email) is sound and kept as-is.
+This document is the source of truth for how the system is put together and why. Read it before
+changing anything structural.
 
 ---
 
-## 2. Weaknesses and technical debt
+## 1. Principles
 
-### 2.1 The database contradicts the vision (critical)
-
-The vision says *"everything important exists in the database instead of relying on AI memory."*
-The implementation has **three domain tables** (`users`, `books`, `chapters`) and stores the entire
-world — characters, memories, locations, goals, chat messages — as **JSON blobs in columns**.
-
-Consequences:
-
-- NPC "memory" is a string array inside a JSON column inside `books.characters`. It cannot be
-  queried, ranked, capped, or selectively retrieved — so the *whole world* is `JSON.stringify`-ed
-  into every prompt (token waste, and the model drowns in irrelevant context).
-- Every save rewrites a whole blob. Two racing writes (the app fires several debounced 5-second
-  syncs from different components) silently lose data.
-- No conversation history table, no event log, no relationship state → conversations restart from
-  whatever fits in the blob; "events have consequences" has nowhere to live.
-
-### 2.2 The client owns the game state (critical)
-
-The gameplay loop runs **in the browser**: `ReadBook.tsx`/`ViewChapters.tsx` assemble AI context,
-call the server, apply world mutations to local React state, then debounce-push whole objects back
-with `updateBook`/`updateChapter`/`updateUser`. This means:
-
-- Closing the tab within the 5s debounce window loses progress.
-- The server blindly trusts any world state the client sends (a cheater can set every word to
-  mastery 10, or rewrite the story).
-- The same context-assembly logic is duplicated three times (`addSectionFunc`, `handleSend`,
-  `handleGrade`).
-
-### 2.3 No authorization (critical security hole)
-
-Every server function has an empty `//auth check` comment. `updateUser(anyUserId, …)`,
-`updateBook(anyBookId, …)`, `deleteBook(anyBookId)`, `getSpecificBook(anyBookId)` are callable by
-anyone with the endpoint. Any user can read, rewrite, or delete any other user's data.
-
-### 2.4 God components and prop drilling
-
-`ReadBook.tsx` is ~1,480 lines mixing setup wizard, validation, AI orchestration, a hand-rolled
-debounced sync engine, and layout. `ViewChapter` threads **13 props** down the tree, including
-three different `set…` dispatchers. Inline styles everywhere; three different state-sync patterns.
-
-### 2.5 The player is exposed to the machinery
-
-To start a story the user must manually click *Add locations → Add places → Add areas → Add
-characters → Add goals → validate* and review raw JSON-shaped cards. That's a developer console,
-not "opening an illustrated storybook." World-building must be one delightful action.
-
-### 2.6 A pre-scripted story pretending to be dynamic
-
-The AI pre-generates up to **20 goals × ~15 sub-goals** (a ~300-item checklist) up front, then the
-story engine linearly walks it. This is brittle (one bad id breaks validation), expensive, and
-contradicts the "living world" goal — the story can't react to what the player actually does.
-
-### 2.7 The learning engine barely exists
-
-- Mastery only ever changes when a player *clicks* a word (`+1, onlyIfAbsent`) — reading well is
-  indistinguishable from ignoring the word.
-- No spaced repetition, no due dates, no review scheduling.
-- Combat (`gameMode`) — the core educational mechanic — is unimplemented.
-- Vocabulary lives in static `public/*.json` files fetched by the client; users can't have packs,
-  progress can't join against words.
-
-### 2.8 Assorted
-
-- `next dev` without Turbopack config, no tests, two pre-existing type errors, `console.log` of
-  entire prompts in production paths, rate limiting is a client-side toy, secrets loaded via
-  `dotenv` in every file instead of Next's built-in env handling.
+1. **The database is the world.** Every noun — character, memory, place, quest, word, wallet — is a
+   table. The AI reads small *queried* slices and returns *structured changes*; it never owns state.
+2. **The server is the game master's desk.** The browser sends intents (talk, fight, answer,
+   travel). The server checks ownership and plausibility, applies the rules, saves, and replies.
+   The browser never authors world state, and never sees an answer key.
+3. **AI where it delights, code where it must be right.** Prose, dialogue, characters' judgement:
+   AI. Challenges, grading, scheduling, dictionary lookups, money: deterministic code. A wrong
+   "correct answer" in a learning game is poison, so answers are computed, never generated.
+4. **Spend tokens like money, because they are.** Every model call is metered and billed. Anything
+   that can be written once and reread (landmark lore, barks, speech audio) is. Anything a cheap
+   model can do (summaries, bookkeeping) goes to the cheap model. Prompts are laid out so the
+   provider's cache can reuse their first thousand tokens.
+5. **No assets to download.** The world is sculpted in code from primitives and a seed. A region is
+   a few hundred kilobytes of JavaScript, not megabytes of models and textures.
 
 ---
 
-## 3. The redesign
-
-### 3.1 Principles
-
-1. **The database is the world.** Every noun in the vision (character, memory, relationship,
-   location, event, quest, conversation, word, progress) is a table. The AI reads compact,
-   *queried* slices and returns *structured deltas*; it never owns state.
-2. **The server is the game master's desk.** Clients send *intents* (move, talk, fight, answer);
-   the server validates ownership + proximity, runs the rules, persists, and returns the new scene.
-   No client-authored world state, ever.
-3. **AI where it delights, code where it must be reliable.** Narration, dialogue, world-forging,
-   judging persuasion: AI. Challenge generation, grading, scheduling, progression math:
-   deterministic TypeScript. (A wrong "correct answer" in a learning game is poison — so answers
-   are computed, not generated.)
-4. **The whole app is a book.** One UI metaphor: a two-page spread. Left page = the illustrated
-   map. Right page = the living story (narration, dialogue, encounters). Everything is parchment,
-   ink, and wood.
-
-### 3.2 Domain model (Postgres via Drizzle)
+## 2. Map of the code
 
 ```
-users                     auth + language settings (kept, minus lessonProgress blob)
-
-vocab_packs               a dictionary/vocab pack for a language pair
-vocab_words               words in a pack (term, meaning, pronunciation, examples)
-word_progress             per-user SRS state per word (due date, interval, ease, streaks)
-challenge_attempts        every answer ever given (feeds SRS + analytics)
-
-stories                   one playthrough: owner, title, premise, target language, status,
-                          player position (current map + x/y), arc stage
-story_packs               which vocab packs feed this story
-
-maps                      handcrafted scenes: name, kind (overworld/settlement/interior/dungeon),
-                          biome, logical width/height, ambience notes
-map_features              scenery + interactables: trees, signs, campfires, buildings… (x, y, kind,
-                          sprite key, lore)
-portals                   doors/exits: mapId + position → targetMapId + position
-
-characters                NPCs & companions: personality, appearance, backstory, mood, position
-character_memories        queryable memory rows (content, importance, kind, timestamp)
-relationships             per-character affinity (-100..100) + rolling relationship summary
-
-enemies                   learning encounters: tier (minion/elite/boss), biome flavor,
-                          challenge types, position, status
-encounters                an active/finished battle: staged challenge plan (answers server-side),
-                          hearts, outcome
-
-quests                    title, description, giver, arc stage, status
-quest_objectives          typed steps: talkTo / defeat / visit / collect / learnWords / custom
-
-conversations             one thread per NPC per story (rolling summary + last-message time)
-messages                  speaker + rich Segment[] content
-
-chapters                  the story log's structure (index, title, summary)
-passages                  narration/dialogue/event entries as Segment[] (the "book text")
-
-events                    the world chronicle: everything that happened, queryable, feeds AI
-                          grounding and the journal UI
+app/                     routes only
+  api/test-login/        dev-only sign-in for the seeded test accounts (section 10)
+engine/                  the 3D world — three.js, no React, no server imports
+game/                    pure logic shared by server and browser (no I/O)
+  languages.ts           the eight languages and what is particular to each
+  looks.ts               the visual vocabulary the AI picks from (hair, outfits, creatures, biomes…)
+  segments.ts            rich story text: Segment[]
+  dictionary.ts          word-card shapes, frequency → level, gloss keys
+  payloads.ts            everything the browser is allowed to see
+  srs.ts                 spaced repetition (pure functions)
+  challenges/            challenge generators and graders (pure functions)
+  worldgen/              seeded region layout + terrain height
+server/
+  auth.ts                requireUser / requireBook — every action starts here
+  ai/                    the one door to the model, prompts, output contracts
+  services/              game rules
+  actions/               "use server" wrappers: parse input → auth → service
+components/              React: screens, the HUD over the 3D canvas
+db/schema.ts             the data model
+scripts/                 dictionary pipeline, test accounts, test browser
+tests/                   unit tests for the pure logic (npm test)
 ```
 
-**Why:** every "the AI should remember / the world should persist" requirement becomes a `SELECT`.
-"Top 8 memories this NPC has about the player" is a query, not a prayer. Writes are row-sized, not
-book-sized; races disappear; and prompts shrink from "the whole world" to "the relevant slice."
+Rules of thumb:
 
-**Rich text.** All story text (passages, messages) is stored as `Segment[]`:
+- `game/` imports nothing from `server/`, `engine/`, `components/` or `db/` (types from `db/` are
+  the one exception the schema itself needs, and they flow the other way).
+- `engine/` imports from `game/` only.
+- Services are plain TypeScript. They begin with `import "server-only"`, which means scripts and
+  tests that import them must run with `--conditions=react-server` (the npm scripts do).
+- Server actions are the API. Route handlers exist only for binary data (speech) and webhooks.
+
+---
+
+## 3. Data model
+
+See `db/schema.ts`; every table and unusual column is commented there. The shape in brief:
+
+| Group | Tables |
+|---|---|
+| Accounts | `users` (+ NextAuth's `account`, `session`, `verificationToken`, `authenticator`) |
+| Dictionary | `dict_entries` (813k headwords), `dict_forms` (5.8M written forms → headword) |
+| Learner | `learner_profiles`, `word_progress`, `challenge_attempts`, `saved_phrases` |
+| Money | `credit_ledger` (append-only), `ai_usage` (one row per model call), `topups`, `tts_cache` |
+| Book | `books`, `chapters`, `passages`, `events` (the chronicle), `threads` (open story threads) |
+| World | `regions`, `buildings`, `landmarks`, `gates` |
+| People | `characters`, `memories`, `relationships`, `conversations`, `messages` |
+| Conflict | `enemies`, `encounters`, `quests`, `quest_objectives` |
+
+Coordinates are metres on the ground plane: `x` east, `z` south. A facing angle `rot` looks along
+`(sin rot, cos rot)`. Height is never stored — it comes from the terrain.
+
+### Rich text
+
+All story text is `Segment[]` (`game/segments.ts`):
 
 ```ts
 type Segment =
-  | { t: "text";  v: string }                                    // native-language prose
-  | { t: "vocab"; wordId: string; surface: string }              // a pack word, in target language
-  | { t: "phrase"; target: string; translation: string;         // ad-hoc target-language phrase
-      pronunciation?: string }
+  | { t: "text"; v: string }                          // the reader's own language
+  | { t: "word"; id: number; s: string }              // one planned dictionary word, in the target language
+  | { t: "tl"; v: string; tr: string; tk: Token[] }   // a target-language phrase or sentence + translation
+type Token = { s: string; id?: number }               // a word of it, linked to the dictionary if found
 ```
 
-The AI selects `vocab` words **only from the word list the vocab planner hands it** (ids are
-re-validated server-side; unknown ids are demoted to plain `phrase` segments — structural
-anti-hallucination, not prompt-hoped).
-
-### 3.3 Server architecture
-
-```
-server/
-  auth.ts                 requireUser(), requireStory(storyId) — every action starts here
-  services/
-    worldForge.ts         one-click story creation: premise → maps → cast → quests → opening
-    scene.ts              scene snapshots: map + features + characters + enemies near player
-    movement.ts           position updates, portal transitions (validated)
-    dialogue.ts           conversation turns: context → AI → persist → memory/relationship deltas
-    narration.ts          passages: arrivals, inspections, quest beats
-    encounters.ts         start/answer/resolve battles; stage generation; hearts
-    learning.ts           the vocab planner + SRS scheduler (SM-2-lite) + mastery stats
-    quests.ts             objective progress, arc advancement
-  ai/
-    client.ts             one generate<T>() helper: model, zod schema, usage logging, retries
-    context.ts            compact context builders (character card, memory slice, scene brief)
-    prompts/              worldForge, narrator, character, judge, encounterFlavor
-  actions/                "use server" — thin: zod-parse input → auth → service → return
-```
-
-- **Server actions are the only API surface** (the `gptConcurrent` route-vs-server-functions split
-  is gone). Voice endpoints (audio streaming) are the one place API routes remain.
-- Services are plain TypeScript — no React, no Next imports — so game rules are unit-testable.
-
-### 3.4 The AI game-master layer
-
-Every generation task gets: a **fixed system prompt** (who the AI is), a **compact context brief**
-(built from queries, with hard caps: ≤8 memories, ≤12 messages, ≤6 events, summaries beyond that),
-and a **zod output schema**. All IDs the AI may reference are provided as short stable keys in the
-brief; everything it returns is re-validated against the DB before persisting.
-
-| Task | Trigger | Output (structured) |
-|---|---|---|
-| World forge | story creation | premise, cast, map contents, opening quests + passage |
-| Narrator | arrivals, inspections, beats | `Segment[]` passage + optional event + objective hints |
-| Character | each dialogue turn | in-character `Segment[]` reply + mood + memory candidates |
-| Judge | conversation ends / objective check | objective verdicts, affinity delta, memory extraction |
-| Encounter flavor | battle start/end, fill-blank needs | intro/defeat lines, cloze sentences |
-
-**Conversation memory pipeline** (the "NPCs remember" requirement): after a conversation goes
-idle, the judge pass extracts durable memories → `character_memories`, updates
-`relationships.affinity` + summary, and appends to `events`. The next conversation's brief includes
-exactly that — so an NPC greets you differently because a *row* says you saved their dog.
-
-### 3.5 The learning engine
-
-- **`word_progress` + SM-2-lite.** Correct answers grow the review interval (1 → 3 → 7 → 16 →
-  35 days… scaled by ease); misses reset it and mark a lapse. Every challenge answer is recorded.
-- **The vocab planner** is the single gateway the AI and encounters use to get words:
-  `plan = { introduce: Word[], review: Word[] }` — new words come from the packs in pack order;
-  reviews are whatever is due. Narration and dialogue naturally re-expose due words; encounters
-  test them. Passive exposure (a `vocab` segment rendered) counts as a light touch; active recall
-  (challenges) drives the schedule.
-- **Reading interactions**: tapping a word flips a small parchment card (meaning + pronunciation +
-  "add to satchel"), and marks first exposure.
-
-### 3.6 Encounters ("combat")
-
-- An enemy is a **staged challenge plan** generated *deterministically* from the vocab plan:
-  minion = 2–3 stages, elite = 4, boss = 3 acts × 2 stages with a finisher. The AI contributes
-  only flavor (intro taunt, defeat line, cloze sentences) — never answers.
-- Challenge types are a **registry** (`game/challenges/`), each type = one generator + one grader +
-  one renderer. V1 ships: word→meaning choice, meaning→word choice, pair matching, spelling,
-  fill-in-the-blank, sentence arranging. The registry makes the other listed types (listening,
-  synonyms, antonyms, translation, crosswords…) drop-in additions.
-- Wrong answers cost a heart (3 hearts); at 0 the player *retreats* (cozy, not punitive — the enemy
-  stays on the map). Victory records an event, advances `defeat` objectives, and updates SRS.
-- Client never receives answers: grading happens server-side against the stored plan.
-
-### 3.7 The world & map system
-
-Maps are **handcrafted scenes, not tile engines** — a logical unit grid (e.g. 32×18) rendered as a
-painterly CSS/SVG page. A few landmarks, 2–5 NPCs, 2–6 enemies, a couple of portals. Entities are
-DOM nodes positioned in percentages; the player token moves with click-to-move + WASD via a
-`requestAnimationFrame` hook that writes `transform` directly (no re-render per frame). Proximity
-(distance check) surfaces a quill-bubble: *Talk / Fight / Inspect / Enter*. Buildings are portals
-to small interior maps. Biome templates (village, forest, cave, interior…) give the world-forge AI
-a fixed visual vocabulary: it picks layouts and names things; it does not invent geometry.
-
-### 3.8 UI: the book
-
-- **Design system**: Tailwind 4 `@theme` tokens — parchment, ink, wood, moss, ember, gold; grain
-  and vignette textures in CSS; storybook serif for display, readable serif for prose
-  (`next/font`). Primitives: `Parchment`, `WoodFrame`, `StorybookButton`, `Ribbon`, `Hearts`,
-  `WordCard`, `PageTurn`.
-- **Screens**: a warm cover page → **the bookshelf** (your stories as book spines) → *opening* a
-  book plays a page-turn into the **two-page spread**: left page is the map illustration, right
-  page is the living text (story log, dialogue, encounters as an overlaid "battle card"). The
-  journal (quests, vocab satchel, chronicle) is a ribbon-tabbed flip. Mobile: the two pages become
-  two tabs.
-- Animations are small and purposeful: page turns, a bobbing player token, candle-flicker on
-  interactables, cards flipping.
-
-### 3.9 Voice
-
-Neither prototype ever implemented audio — it was a stated goal in the author's notes. Here it
-becomes real plumbing: dialogue gets a mic button (hold-to-speak → `/api/voice/transcribe`, OpenAI transcription) and a
-speaker button per NPC line (`/api/voice/speak`, OpenAI TTS with a per-character voice). The same
-plumbing later powers listening/pronunciation challenge types.
-
-### 3.10 Paying the storyteller (billing)
-
-Every AI moment costs real money, so onboarding (`/welcome`) makes new users choose a mode
-(stored as `users.billingMode`; switchable any time):
-
-- **✨ Sparks (credits)** — the app's OpenAI key, metered in sparks. Balances live in an
-  **append-only `credit_ledger`** plus a cached `users.sparks` column that is only ever changed in
-  the same transaction as a ledger row; spending is atomic
-  (`UPDATE … WHERE sparks >= cost RETURNING`), so concurrent actions can never overdraw. Prices
-  per task live in one place (`SPARK_COSTS` in `server/services/billing.ts`: page of story 2,
-  dialogue turn 2, chapter turn 6, world forge 30 — charged at story creation so forge *retries*
-  are free; victory prose and mic input are free). Credits users are served by the half-price
-  flagship-class model (`AI_MODEL_CREDITS`, default gpt-5.4) so bundles carry a real margin;
-  BYOK users get the full flagship on their own key. New credits users get a one-time 100-spark
-  starter gift (guarded by ledger reason). The UI shows the balance everywhere
-  (`BillingBadge`), nudges below 10 sparks, and `/sparks` lists top-up bundles (Stripe-ready
-  scaffold) and the ledger.
-- **🔑 BYOK** — the player's own OpenAI key. It is validated once with a free `models.list`
-  probe, then stored **only on the device** (cookie + localStorage mirror) — never in the
-  database, never logged. It rides each request over TLS and `openaiForRequest()` uses it in
-  memory. If the device loses it (new browser, cleared storage), the badge detects the absence
-  and prompts re-entry; the server refuses to fall back to the app's key for BYOK users.
-
-Store note: consumable credits sold *inside* a Play-distributed app must use Google Play Billing;
-the intended v1 is web top-ups (Stripe) with the app consuming the balance, and BYOK sidesteps
-billing entirely.
-
-### 3.11 Scale posture
-
-Stateless server actions + row-sized writes + capped AI context = horizontally scalable and
-bounded cost per interaction. Indexes on every FK and on `word_progress.dueAt`. The expensive
-operation (world forge) happens once per story and shows a progress page.
+The AI never sees database ids. It is offered words under short keys (`w1`, `w2`…) and writes
+`{t:"vocab", key:"w1", surface:"comió"}`; the server swaps keys for ids and drops any key it did not
+offer. For `tl` spans the AI writes only the text and translation; the **server** tokenises the
+text and links each token to the dictionary. Every target-language word on screen is therefore
+tappable, at no token cost.
 
 ---
 
-## 4. Migration
+## 4. The dictionary
 
-- New tables coexist by name (`stories`, not `books`). `npm run db:push` applies the new schema —
-  drizzle will *prompt* before dropping the legacy `books`/`chapters` tables and the two old
-  `users` JSON columns; confirm knowingly (it's prototype data). `npm run db:seed` imports the
-  existing `public/languageLessons/*.json` dictionaries as built-in vocab packs.
-- Old gameplay code (`components/books|chapters`, `serverFunctions`, `gptConcurrent` route,
-  root `types.ts`) is removed once the new game screen replaces it.
+Open data, imported by `scripts/dict/` (download → parse → rank → load):
 
-## 5. Incremental build order
+| Language | Source |
+|---|---|
+| Spanish, French, German, Italian, Portuguese, Korean | kaikki.org machine-readable Wiktionary |
+| Japanese | JMdict (via jmdict-simplified), with generated verb and adjective inflections |
+| Mandarin | CC-CEDICT |
+| Teaching order, all languages | subtitle word frequencies (hermitdave/FrequencyWords) |
 
-1. Schema + seed (vocab packs from existing JSON)
-2. Learning engine (SRS + planner) and challenge registry — pure, testable
-3. AI layer (client, context builders, prompts)
-4. World forge + story creation flow
-5. Scene/movement/dialogue/encounter services + server actions
-6. Design system + bookshelf + two-page game screen
-7. Map engine hook + encounter UI + dialogue UI
-8. Voice endpoints
-9. Delete legacy, verify (typecheck/lint/build)
+- Wiktionary lists every inflected form as its own entry. Those are folded into `dict_forms`, so
+  tapping *comió* lands on *comer*.
+- `freqRank` orders headwords by how common they are; `level` (1–6, A1–C2-like) is derived from it.
+  Ambiguous written forms share their corpus count between candidate headwords by
+  expectation–maximisation (`scripts/dict/frequency.ts` explains why).
+- `teachable = false` keeps a word look-up-able but out of lessons (vulgar, archaic, letter names…).
+- `glossKeys` are normalised one- or two-word English meanings under a GIN index: "which Spanish
+  words mean *well*?" is one indexed query. That is how scenery gets labelled in the target
+  language and how a scene about a tavern can be offered tavern vocabulary.
+- A re-import matches on (language, headword, part of speech) and updates in place, so learners'
+  progress stays attached.
+- **Curation** (`scripts/dict/curate.ts`): the top few thousand words per language are reviewed once
+  by a model — is this really a common word, what is its best short meaning, give one simple
+  example sentence. Results are saved under `data/dict-curation/` and applied by the importer, so
+  the review is paid for once and survives re-imports. Example sentences from curation are what
+  cloze and sentence-ordering challenges use, which removes a model call from every battle.
+
+At run time (`server/services/dictionary.ts`), unknown forms fall back to: strip punctuation → try
+lower-case → (spaced languages) strip common clitics. A form the storyteller itself used and the
+dictionary cannot place may be resolved once by the cheap model and remembered in `dict_forms`
+with `source = 'ai'`.
+
+---
+
+## 5. The learning engine
+
+- **Spaced repetition** (`game/srs.ts`): SM-2-lite over `word_progress`. Correct answers stretch
+  the interval (1 → 3 → ×ease days); a miss brings the word back within the session.
+- **Three strengths of evidence.** *Seen* (the word appeared in text the player read),
+  *recognised* (a challenge answered), *produced* (the player wrote or spoke it themselves in
+  dialogue). Only recognition and production move the schedule.
+- **The vocab planner** (`planWords` in `server/services/learning.ts`) is the single gateway for
+  "which words should appear now": due reviews first, then words that fit the scene (looked up by
+  meaning), then the next most common words the player has not met. One entry per headword; content
+  words only at low immersion, because a lone preposition embedded in an English sentence teaches
+  nothing.
+- **The immersion ladder** decides how much of the book is written in the target language:
+
+  | Level | Name | The book… |
+  |---|---|---|
+  | 0 | Newcomer | drops single words into sentences where context makes them guessable |
+  | 1 | Wanderer | adds greetings and short phrases |
+  | 2 | Speaker | lets characters say one short full sentence per scene |
+  | 3 | Storyteller | has characters speak half their lines in the target language |
+  | 4 | Voyager | writes dialogue mostly in the target language; narration mixes |
+  | 5 | Immersed | is written in the target language; the reader's own is only ever a tap away |
+
+  The level comes from how many words the player demonstrably knows, plus the level they said
+  they started at, shifted by their preference (cozy / balanced / bold).
+- **Production is judged.** When the player types in the target language, the character's reply
+  carries a `LanguageNote`: a verdict, a more natural phrasing, one short tip. Words they used
+  correctly count as produced.
+- **World words.** Landmarks carry a floating label in the target language (*el pozo* over the
+  well), chosen from the dictionary by meaning — no model call.
+- **Pronunciation.** Word cards show IPA, reading or romanisation from the dictionary. Audio is
+  generated once per (voice, text) and cached for everyone in `tts_cache`; a human recording from
+  Wikimedia Commons is used when the dictionary has one.
+- **The study hall** (`/study`) runs review sessions from the same challenge registry with no model
+  calls at all.
+
+---
+
+## 6. The storyteller (AI layer)
+
+### One door
+
+`server/ai/client.ts` exports `generate({ task, tier, instructions, input, schema, cacheKey })`.
+It picks the model for the tier, requests structured output against a zod schema, re-validates,
+retries once, records an `ai_usage` row with token counts and cost, and charges the wallet.
+
+| Tier | Default model | Used for |
+|---|---|---|
+| `story` | `gpt-6-sol` | dialogue, narration, the forge, chapter turns |
+| `scribe` | `gpt-6-luna` | summaries, memory consolidation, the director's bookkeeping, word resolution |
+
+Override with `OPENAI_MODEL_STORY` / `OPENAI_MODEL_SCRIBE`. Prices live in `server/ai/pricing.ts`.
+
+Both models are asked for **no reasoning effort** on everything a player waits for (dialogue,
+narration, the forge) and a little on the director and chapter turns. Measured: leaving the
+setting out runs at "medium" and triples the wait; these models reject "minimal".
+
+A book begins from **sparks** drawn by lot from its seed (`game/sparks.ts`): a kind of country, what
+its people are known for, a thing that matters, something strange, and the shape of the title.
+Asked to invent a story from nothing, the model wrote the same one every time (seven books in a
+row about a bell and a loaf); asked to build one around a kite, a salt marsh and a road that is
+longer going home, it cannot. What the reader asks for in their own words outranks the sparks.
+
+Forging a book is four calls: the idea; then the people and everything else side by side; then
+the opening. Written as one request, the world took a minute and a half. Measured now: about 65
+seconds of writing (11 + 40 + 12) and 80 from the button to the first page. The model's writing
+speed, some 58 tokens a second, is what is left. The forge runs as one long server action; the
+screen that waits on it asks `GET /api/books/[bookId]/forge` how far along it is, because a
+second server action would queue behind the first.
+
+### Prompt layout and caching
+
+OpenAI caches prompt prefixes of 1,024 tokens or more and bills cached input at a tenth of the
+price. Every prompt is therefore laid out stable-first:
+
+1. the rulebook — how to write segments, the immersion ladder (identical for every call)
+2. the book's **bible** — title, premise, tone, the world's fixed facts (changes only at chapter turns)
+3. the character sheet, for dialogue (changes rarely)
+4. *then* everything that moves: memories, recent lines, the scene, offered words, the player's message
+
+Parts 1–3 go in `instructions`, part 4 in `input`, and `prompt_cache_key` is set to the book (and
+character), so consecutive turns of a conversation reuse the same cached prefix.
+
+The provider places the output schema, and the name it is sent under, *before* the instructions.
+Two tasks therefore share a cache only if they share both: a greeting is asked for in the shape
+of any other turn (`schemaName: "character-turn"`), and every kind of narration is `"narration"`.
+
+### Memory
+
+A character's prompt never contains "everything". It contains:
+
+- **every line the summary does not cover yet**, verbatim: eight at least, eighteen or so at
+  most. (Carrying only the last eight left a gap: the lines waiting to be summarised were in
+  neither place, and a character forgot the middle of the conversation they were having.)
+- **a rolling summary** of the rest (`conversations.summary`), refreshed by the scribe every ten
+  messages
+- **up to six memories**, chosen by score: `importance × recency × relevance`, where relevance is
+  keyword overlap with what the player just said and where they are. The two newest promises
+  are always included (nothing marks a promise as kept, so holding all of them would in time
+  leave room for nothing else). Recalled memories are reinforced (`recallCount`), so what
+  matters stays sharp.
+- **the relationship**: affinity and a two-sentence summary
+
+Memories are written by the same call that produces the reply (no extra request). When a character
+holds more than forty, the scribe consolidates the oldest minor ones into a few reflections.
+
+**Gossip.** When something important happens (importance ≥ 7), characters in the same region get a
+`rumor` memory of it — by rule, with no model call. Defeat the thing in the woods and the innkeeper
+has heard by the time you walk back.
+
+### The director (the feedback loop)
+
+`events` carry an importance. Each adds to `books.significance`; when that crosses a threshold —
+and always when a quest resolves — the director runs once on the scribe tier. It reads the bible,
+the open `threads`, the recent chronicle and the quest state, and returns structured changes:
+threads opened, advanced or resolved; a new quest; a character's goal or mood shifting; a note to
+the narrator about where to lean next. Code applies those changes after validating every reference.
+This is how a choice in chapter one still matters in chapter four without the whole history being
+resent every turn.
+
+### Quests, choices and chapters
+
+A chapter ends when every quest of its stage is settled, completed or lost
+(`isChapterTurnReady`). Everything else follows from keeping that always possible:
+
+- **Steps have an order** (`game/quests.ts`). What can be done again (a talk, a visit, a look)
+  waits its turn, so "return to Marta" is not done by having met her. A creature bested or a word
+  learned counts whenever it happens, because it may not be possible twice. Steps that are not
+  yet due are shown dimmed, and only the next step is marked in the world.
+- **Progress is applied before anything is skipped.** Examining a landmark a second time rereads
+  its page for nothing, but still counts for a quest given since. A visit to where the hero
+  already stands is dropped when a quest is written and completed when it comes due.
+- **Words are learned in three places**: a battle, the study hall, and by using them rightly in
+  conversation. All three count toward "learn some words".
+- **A chapter always has a quest** (`standingQuest`), holds five at most, and the director may
+  add one only while the chapter is still under way.
+- **The reader can let a quest go** (journal → quests). It is lost, the story is told, and the
+  chapter stops waiting for it.
+- **Turning points end in a choice.** The page written when a quest resolves offers two or three
+  ways on; what is chosen is written as the next page and entered in the chronicle with weight,
+  which is where the director finds it. Examining something offers a choice when it invites one.
+
+`scripts/checkGrowth.ts` plays all of this through with real model calls and lists what broke.
+
+### What costs nothing at play time
+
+Written once and reread: landmark lore (first examination writes the passage; later ones reread
+it), character barks (written at the forge), speech audio, world labels, challenge content.
+
+---
+
+## 7. The world
+
+A book has a handful of **regions** (a settlement, wilds, depths; more as the story grows), joined
+by **gates**. A region is rebuilt from its `seed` on every device:
+
+- `game/worldgen/layout.ts` decides where the plaza, roads, clearings, building plots and slots for
+  people and creatures go. The server uses it at the forge to place things (stored as rows); the
+  browser uses the identical layout to build the terrain.
+- `game/worldgen/terrain.ts` raises the ground: rolling swells, rough detail away from paths, a rim
+  of hills (or open sea) closing the region in, passes cut where gates are open.
+- A chapter turn may add a region, which opens a gate in one that is already peopled. Nothing
+  placed there may move, and the new road may run into none of it: so the road to each of the
+  four gates is drawn from the start, a closed side shows only its first stretch as a lane, and
+  buildings, landmarks and water keep clear of all four.
+- The AI **fills** the layout — names, lore, cast, which biome and hour — by choosing from the
+  enumerations in `game/looks.ts`. It never invents geometry, so it cannot produce an unplayable
+  map.
+
+### The engine (`engine/`)
+
+Plain three.js, driven imperatively; React only draws the HUD on top.
+
+- Everything is sculpted from primitives into merged geometry with per-vertex colour and drawn
+  with one shared matte material (`engine/geo.ts`). Vegetation is instanced and sways in the
+  vertex shader. A whole region is on the order of fifty draw calls.
+- One shadow-casting sun that follows the hero; hemisphere light for the rest. Fog melts the rim
+  into the sky.
+- The engine watches its own frame time and lowers resolution, then shadows, then foliage density
+  before it lets the frame rate drop.
+- Names and target-language labels are HTML positioned over the canvas, so CJK text is crisp and
+  costs no texture memory.
+
+### Combat
+
+Walking into a creature starts an **encounter**: a staged plan of challenges built deterministically
+from the vocab planner (due words first). Each correct answer is a spell cast; each miss costs a
+heart. Out of hearts, the hero retreats — the creature stays. Ordinary creatures return after a
+while, so there is always something to practise on; quest targets and bosses do not.
+
+---
+
+## 8. Paying for it
+
+Two modes, chosen at onboarding and switchable:
+
+- **Wallet.** Prepaid credit in micro-dollars. Each model call is metered from the provider's own
+  token counts and charged at cost × `USAGE_MARKUP` (default 1). The platform's margin is taken at
+  **top-up**: packages in `server/services/wallet.ts` say what is paid and what is credited
+  (pay $6, receive $5). `users.creditMicros` is a cache of the ledger and only ever changes in the
+  same transaction as a `credit_ledger` row. A call is refused when the balance is at or below
+  zero; it may dip slightly negative on the last call, never further.
+- **Bring your own key.** The player's OpenAI key lives only on their device (cookie + local
+  storage), rides each request, and is never stored or logged. Usage is still recorded, uncharged.
+
+Top-ups go through a `PaymentProvider` interface. A payment is credited exactly once: the ledger
+has a unique index on (reason, ref) and `topups` on (provider, providerRef), so a repeated webhook
+is a no-op.
+
+---
+
+## 9. Security
+
+- Identity always comes from the session (`requireUser`). Book access always goes through
+  `requireBook`, which checks ownership.
+- Every server action parses its input with zod before anything else.
+- Answers to challenges are stored server-side in `encounters.stages` and never serialised out.
+- The player's typed messages are data in a prompt, never instructions: they are quoted into the
+  `input`, after the rules.
+
+---
+
+## 10. Test mode — Claude can play
+
+So that changes are checked in the real app rather than assumed from reading code:
+
+- `npm run test:seed` creates two accounts, flagged `isTest`: **player** (onboarded, wallet credit)
+  and **newcomer** (never onboarded).
+- `/api/test-login?as=player&secret=…&to=/path` signs one in. It exists only outside production
+  builds, only when `TEST_MODE_SECRET` is set (in `.env.development.local`), and only ever for a
+  flagged test account.
+- `scripts/testBrowser.mjs` drives headless Chrome with WebGL: navigate, click by label, type, hold
+  keys to walk, screenshot, and call the game's dev hook (`window.__wordbound`) to ask the engine
+  what it sees or to walk the hero to the nearest character.
+
+See `AGENTS.md` for how to use it.

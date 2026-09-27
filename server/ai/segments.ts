@@ -1,86 +1,105 @@
 import "server-only";
-import type { Segment } from "@/game/segments";
-import type { VocabWord } from "@/db/schema";
+import type { DictEntry } from "@/db/schema";
+import { POS_NAMES } from "@/game/dictionary";
+import { LANGUAGES, type LangCode } from "@/game/languages";
+import type { DialogueOption, PassageChoice } from "@/game/payloads";
+import { respace, type Segment } from "@/game/segments";
+import { tokenize } from "../services/dictionary";
+import type { PlannedWord } from "../services/learning";
 import type { AiSegment } from "./schemas";
 
 /**
- * The vocabulary the AI is allowed to weave into text, keyed w1, w2, …
- * Real ids never reach the model; unknown keys coming back are demoted to
- * plain text instead of corrupting learning data.
+ * The vocabulary the model may weave into what it writes, keyed w1, w2, …
+ * Real ids never reach the model; a key it makes up is dropped on the way
+ * back rather than allowed to corrupt anyone's learning record.
  */
 export type WordOffer = {
     brief: string;
-    byKey: Map<string, VocabWord>;
+    byKey: Map<string, DictEntry>;
 };
 
-export function offerWords(words: { word: VocabWord; purpose: "introduce" | "review" }[]): WordOffer {
-    const byKey = new Map<string, VocabWord>();
-    const lines = words.map(({ word, purpose }, i) => {
+const PURPOSE: Record<PlannedWord["purpose"], string> = {
+    review: "DUE — the reader has met it and should meet it again now",
+    scene: "NEW — fits this place",
+    introduce: "NEW",
+};
+
+export function offerWords(planned: PlannedWord[]): WordOffer {
+    const byKey = new Map<string, DictEntry>();
+    const lines = planned.map(({ entry, purpose }, i) => {
         const key = `w${i + 1}`;
-        byKey.set(key, word);
-        const prn = word.pronunciation ? `, pronounced "${word.pronunciation}"` : "";
-        return `- ${key}: "${word.term}" = "${word.meaning}"${prn} (${purpose === "introduce" ? "NEW — introduce gently with context" : "REVIEW — reinforce naturally"})`;
+        byKey.set(key, entry);
+        const gender = entry.gender ? `, ${entry.gender}` : "";
+        const reading = entry.reading && entry.reading !== entry.lemma ? ` [${entry.reading}]` : "";
+        return `- ${key}: ${entry.lemma}${reading} = ${entry.gloss} (${POS_NAMES[entry.pos] ?? entry.pos}${gender}) — ${PURPOSE[purpose]}`;
     });
     return {
-        brief: lines.length > 0 ? lines.join("\n") : "(none this scene — write natively)",
+        brief: lines.length > 0 ? lines.join("\n") : "(none — write without vocab segments)",
         byKey,
     };
 }
 
-/** validate AI segments against the offer and produce storable segments */
-export function resolveSegments(aiSegments: AiSegment[], offer: WordOffer): Segment[] {
-    const out: Segment[] = [];
-    for (const seg of aiSegments) {
-        if (seg.t === "text") {
-            if (seg.v.length > 0) out.push({ t: "text", v: seg.v });
-        } else if (seg.t === "phrase") {
-            out.push({
-                t: "phrase",
-                target: seg.target,
-                translation: seg.translation,
-                pronunciation: seg.pronunciation ?? undefined,
-            });
-        } else {
-            const word = offer.byKey.get(seg.key);
-            if (word) {
-                out.push({ t: "vocab", wordId: word.id, surface: seg.surface || word.term });
-            } else if (seg.surface) {
-                // hallucinated key — keep the prose readable, drop the claim
-                out.push({ t: "text", v: seg.surface });
-            }
+export const NO_WORDS: WordOffer = { brief: "(none — write without vocab segments)", byKey: new Map() };
+
+/** turn what the model wrote into what the book stores: keys become ids, target text is linked word by word */
+export async function resolveSegments(lang: LangCode, written: AiSegment[], offer: WordOffer): Promise<Segment[]> {
+    const resolved = await Promise.all(written.map(async (segment): Promise<Segment | null> => {
+        if (segment.t === "text") {
+            return segment.v.length > 0 ? { t: "text", v: segment.v } : null;
         }
+        if (segment.t === "tl") {
+            const target = segment.target.trim();
+            if (target.length === 0) return null;
+            return { t: "tl", v: target, tr: segment.translation.trim(), tk: await tokenize(lang, target) };
+        }
+        const entry = offer.byKey.get(segment.key);
+        const surface = segment.surface.trim();
+        if (entry) return { t: "word", id: entry.id, s: surface || entry.lemma };
+        if (surface.length === 0) return null;
+        // a made-up key: keep the prose readable, and still let the word be tapped if the dictionary knows it
+        const tokens = await tokenize(lang, surface);
+        return tokens.some((token) => token.id !== undefined)
+            ? { t: "tl", v: surface, tr: "", tk: tokens }
+            : { t: "text", v: surface };
+    }));
+
+    // neighbouring text runs are merged, so stored passages stay compact
+    const out: Segment[] = [];
+    for (const segment of resolved) {
+        if (!segment) continue;
+        const last = out[out.length - 1];
+        if (segment.t === "text" && last?.t === "text") last.v += segment.v;
+        else out.push(segment);
     }
-    return out;
+    // target-language pieces were trimmed above, and the writer sometimes forgets the space beside them
+    return respace(out, LANGUAGES[lang].spaced);
 }
 
-/**
- * How much target language the prose may carry, by immersion level (0–3).
- * The reader earns each step by retaining words, so the escalation is slow
- * and every tap still reveals a translation — immersion, never a wall.
- */
-const IMMERSION_GUIDANCE = [
-    // 0 — Newcomer
-    `- The reader is brand new. Use offered words as single words inside otherwise native-language sentences, where context makes the meaning guessable.
-- At most 1 short phrase in the whole scene.`,
-    // 1 — Wanderer
-    `- The reader knows a handful of words. Use offered words freely and let characters greet, exclaim, and name everyday things in the target language (1–2 short phrases).`,
-    // 2 — Speaker
-    `- The reader is getting comfortable. Besides offered words, you may build ONE short full sentence in the target language per scene — composed mostly of REVIEW words the reader already knows (as a phrase segment with its translation).`,
-    // 3 — Storyteller
-    `- The reader is strong. Characters may speak 1–2 complete target-language lines per scene (phrase segments with translations), built mostly from REVIEW words; narration stays mostly native so the story remains effortless to follow.`,
-];
+/** a line the model wrote in one language or the other, as segments */
+export async function lineToSegments(lang: LangCode, text: string, translation: string | null, inTarget: boolean): Promise<Segment[]> {
+    const line = text.trim();
+    if (line.length === 0) return [];
+    if (!inTarget) return [{ t: "text", v: line }];
+    return [{ t: "tl", v: line, tr: (translation ?? "").trim(), tk: await tokenize(lang, line) }];
+}
 
-export function segmentFormatRules(immersionLevel: 0 | 1 | 2 | 3 = 0): string {
-    return `
-WRITING FORMAT — the text you write is a JSON array of segments:
-- { "t": "text", "v": "…" } — prose in the player's native language.
-- { "t": "vocab", "key": "w1", "surface": "…" } — ONE of the offered vocabulary words, written in the target language exactly where it belongs in the sentence. "surface" is the word as it appears (it may be conjugated). Use ONLY keys from the offered list — never invent keys.
-- { "t": "phrase", "target": "…", "translation": "…", "pronunciation": "…" } — a short extra target-language phrase you chose yourself (greeting, exclamation, everyday expression), with its native translation.
+export async function toDialogueOptions(
+    lang: LangCode,
+    options: { text: string; translation: string | null; tone: string; inTarget: boolean }[],
+): Promise<DialogueOption[]> {
+    const built = await Promise.all(options.slice(0, 4).map(async (option, i): Promise<DialogueOption | null> => {
+        const segments = await lineToSegments(lang, option.text, option.translation, option.inTarget);
+        if (segments.length === 0) return null;
+        return { key: `o${i + 1}`, segments, tone: option.tone.slice(0, 24), inTarget: option.inTarget };
+    }));
+    return built.filter((option): option is DialogueOption => option !== null);
+}
 
-VOCABULARY RULES:
-- Weave offered words into dialogue and narration so their meaning is guessable from context. The sentence must still read naturally.
-- Never list words, never explain like a textbook, never translate inline in the prose (the game shows meanings when tapped).
-- Use each offered word at most twice; you don't have to use them all.
-- Keep phrases short (1–6 words).
-${IMMERSION_GUIDANCE[immersionLevel]}`;
+export function toChoices(choices: { label: string; tone: string }[] | null): PassageChoice[] | null {
+    if (!choices || choices.length < 2) return null;
+    return choices.slice(0, 3).map((choice, i) => ({
+        key: `c${i + 1}`,
+        label: [{ t: "text", v: choice.label.trim() }],
+        tone: choice.tone.slice(0, 24),
+    }));
 }

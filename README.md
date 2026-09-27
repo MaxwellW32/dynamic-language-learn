@@ -1,71 +1,107 @@
 # Wordbound
 
-*An AI-powered interactive storybook language-learning RPG.*
+*A storybook you walk around inside, that teaches you its language.*
 
-You open a book and become its hero. The world is persistent — characters remember your
-conversations, relationships grow, events have consequences — and everything important lives in
-the database, not in the AI's short-term memory. Vocabulary from the packs you choose is woven
-naturally into narration, dialogue, and quests; "combat" means defeating enemies with language
-challenges scheduled by spaced repetition.
+You create a book. An AI storyteller forges a world for it — a village, wild country, something
+old and hidden — with people who have secrets and want things. You explore it in 3D, talk to
+anyone about anything, fight creatures with words, and read the story as it writes itself, with
+more and more of it in the language you are learning. Spanish, French, German, Italian,
+Portuguese, Japanese, Korean and Mandarin, each backed by a full open dictionary.
 
-**Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first** — it documents the analysis of the two
-prototypes this grew from, every architectural decision, and the reasoning behind them.
+**Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first.** It explains how the system is put
+together and why. [AGENTS.md](AGENTS.md) explains how to sign in as the test player and check
+changes in the real app. [docs/ROADMAP.md](docs/ROADMAP.md) lists what is deliberately not built
+yet.
 
 ## Stack
 
-Next.js 16 (App Router) · React 19 · TypeScript · Drizzle ORM + Postgres · NextAuth v5 ·
-OpenAI (structured outputs, TTS, transcription) · Tailwind 4 · Jotai
+Next.js 16 (App Router) · React 19 · TypeScript · three.js · Drizzle ORM + Postgres · NextAuth v5 ·
+OpenAI (structured output, speech, transcription) · Tailwind 4 · Jotai
 
 ## Setup
 
-1. `.env.local` needs: `DATABASE_URL`, `OPENAI_API_KEY`, `AUTH_SECRET`,
-   `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET` and/or `EMAIL`/`EMAIL_PASS` (Gmail for magic links).
-   Optional: `OPENAI_MODEL` (BYOK/flagship tier, defaults to `gpt-5.5`),
-   `OPENAI_MODEL_CREDITS` (sparks tier, defaults to `gpt-5.4`), and
-   `OPENAI_MODEL_FAST` (mechanical tier, defaults to `gpt-5.4-mini`).
-2. Apply the schema — **note:** this will also offer to drop the legacy prototype tables
-   (`books`, `chapters`) and two old `users` columns; confirm knowingly:
+1. `.env.local` needs `DATABASE_URL`, `OPENAI_API_KEY`, `AUTH_SECRET`, `AUTH_URL`, and
+   `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` and/or `EMAIL` / `EMAIL_PASS` (Gmail, for sign-in links).
+   Optional: `OPENAI_MODEL_STORY` (default `gpt-6-sol`), `OPENAI_MODEL_SCRIBE` (default
+   `gpt-6-luna`), `USAGE_MARKUP` (default 1), `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET`.
+2. Apply the schema: `npm run db:push`
+3. Load the dictionaries (about 620 MB to download, 1 GB in Postgres, ten minutes):
    ```bash
-   npm run db:push
+   npm run dict:download
+   npm run dict:import
    ```
-3. Seed the built-in vocab packs (syncs the dictionaries under `data/vocab/` — re-run any time;
-   it appends newly added words to existing packs without touching learner progress):
-   ```bash
-   npm run db:seed
-   ```
-4. Run it:
-   ```bash
-   npm run dev
-   ```
+   The reviewed meanings and example sentences under `data/dict-curation/` are applied by the
+   import; `npm run dict:curate <lang>` extends them.
+4. For test mode, put `TEST_MODE_SECRET=<16+ random characters>` in `.env.development.local`,
+   then `npm run test:seed`.
+5. `npm run dev` — the app is on port 3011.
 
 ## Where things live
 
 ```
-app/                routes only (bookshelf, story creation, the game, voice API)
-components/
-  ui/               storybook design system (parchment, wood, quill…)
-  game/             the open book: map engine, dialogue, encounters, journal
-  story/            creation + forging screens
-game/               pure shared logic: segments, SRS, challenge registry,
-                    handcrafted map templates, sprite/voice vocabularies
+app/                routes: cover and shelf, book wizard, the game, study hall, wallet
+engine/             the 3D world: terrain, plants, buildings, people, creatures, camera, effects
+game/               pure logic shared by server and browser: languages, looks, story text,
+                    dictionary shapes, spaced repetition, challenges, region layout
 server/
-  auth.ts           requireUser / requireStory — every action starts here
-  ai/               the game master: one model client, compact context briefs,
-                    zod-validated outputs, id-key mapping (anti-hallucination)
-  services/         game rules: world forge, scenes, dialogue, encounters,
-                    learning (SRS + vocab planner), quests, chapters
-  actions/          thin "use server" wrappers: zod-parse → auth → service
-db/                 Drizzle schema — the world model (20 tables)
-scripts/seed.ts     vocab pack importer
+  ai/               the one door to the model, prompts, output contracts, prices
+  services/         game rules: forge, scene, dialogue, memory, narration, director, quests,
+                    encounters, chapters, learning, dictionary, study, wallet
+  actions/          "use server" wrappers: parse input → who is asking → service → Result
+  payments/         payment providers behind one interface
+components/
+  game/             the game screen: canvas, HUD, dialogue, battle, reading, journal
+  book/ shelf/      wizard, forge screen, cover, bookshelf
+  words/ learn/     story text with tappable words, the word card, challenges
+  study/ account/   study hall, wallet, onboarding
+db/schema.ts        the data model
+scripts/            dictionary pipeline, test accounts, test browser, checks
+tests/              unit tests for the pure logic
 ```
 
-## Useful scripts
+## Scripts
 
 | command | what it does |
 |---|---|
-| `npm run typecheck` | strict TypeScript check |
-| `npm run lint` | ESLint |
-| `npm run db:generate` | write SQL migration files from the schema |
-| `npm run db:push` | apply the schema to the database |
-| `npm run db:seed` | import built-in vocab packs |
-| `npm run db:wipe` | ⚠️ drop everything in the database (dev reset: wipe → push → seed) |
+| `npm run dev` | the app, on port 3011 |
+| `npm test` | unit tests (challenges, scheduling, dictionary helpers, prices, wallet rules, story text, region layout) |
+| `npm run typecheck` · `npm run lint` | TypeScript · ESLint |
+| `npm run db:push` | apply `db/schema.ts` to the database |
+| `npm run db:status` | database size and row counts |
+| `npm run db:reset-game` | ⚠️ drop every game table, keeping accounts and the dictionary |
+| `npm run dict:download` · `dict:import` · `dict:curate <lang>` | the dictionary pipeline |
+| `npm run test:seed` · `test:status` · `test:books` · `test:clean` | the test accounts |
+| `node scripts/testBrowser.mjs <role> <path>` | screenshot a page as a test account |
+| `node scripts/newBook.mjs [language]` | create a book through the wizard, in a browser |
+| `node scripts/playthrough.mjs <bookId>` | play a book in a browser, with screenshots |
+| `node scripts/shots.mjs` | screenshot a dozen made-up regions of the engine |
+| `npx tsx --conditions=react-server scripts/checkStory.ts es` | forge and play a book with no browser |
+| `npx tsx --conditions=react-server scripts/checkGrowth.ts it --chapters=2 --grow` | play a book until its chapters turn, and list what went wrong |
+| `npx tsx --conditions=react-server scripts/relabel.ts --show` | print every language's world labels; refresh them in existing books |
+| `npx tsx scripts/usageReport.ts` | what the model calls have taken and cost |
+
+## What it costs to run
+
+Measured with the default models (September 2026 prices):
+
+| | model calls | cost |
+|---|---|---|
+| Forging a book | 4 | about 7 cents |
+| A conversation turn | 1 | about 0.4 cents, once the prompt prefix is cached |
+| Examining something, arriving somewhere | 1 | about 0.7 cents, first time only |
+| A battle | 0 (1 for a victory page over an elite or boss) | nothing, or 0.7 cents |
+| The director | 1, every so often, on the cheap model | about 0.05 cents |
+| Turning a chapter | 1 (3 if the story opens a new place) | about 1 cent (6 with a new place) |
+| A whole first chapter, forge included | about 30 | about 23 cents |
+| Looking up, hearing or studying a word | 0 after the first time anyone heard it | nothing |
+
+Players pay from a prepaid wallet metered on real token cost, with the platform's margin taken at
+top-up (pay $6, receive $5 of credit), or bring their own OpenAI key.
+
+## Dictionaries
+
+Open data: Wiktionary via [kaikki.org](https://kaikki.org) (CC BY-SA 4.0 / GFDL),
+[JMdict](https://www.edrdg.org/jmdict/j_jmdict.html) (CC BY-SA 4.0),
+[CC-CEDICT](https://www.mdbg.net/chinese/dictionary?page=cc-cedict) (CC BY-SA 4.0), and word
+frequencies from [FrequencyWords](https://github.com/hermitdave/FrequencyWords) (CC BY-SA 4.0).
+The app credits them at `/about/dictionaries`.

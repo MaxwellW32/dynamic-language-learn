@@ -2,7 +2,8 @@
 
 /*
  * The book's palette: parchment, ink, wood, moss, ember, gold.
- * Everything in the app should feel like it was printed, inked, or carved.
+ * Everything in the app should feel printed, inked or carved — and over the
+ * 3D world, like a page laid on glass: light enough to see the world through.
  */
 @theme inline {
     --color-parchment: #f7ecd4;
@@ -18,6 +19,9 @@
     --color-ember: #c2571b;
     --color-ember-deep: #96400f;
     --color-gold: #c99e2c;
+    --color-gold-bright: #f0c651;
+    --color-sky: #3f7fa8;
+    --color-rose: #b8495f;
     --color-night: #241a12;
 
     --font-display: var(--font-im-fell), Georgia, serif;
@@ -26,10 +30,17 @@
 
     --shadow-page: 0 2px 6px rgb(58 45 34 / 0.18), 0 12px 40px rgb(58 45 34 / 0.22);
     --shadow-card: 0 1px 3px rgb(58 45 34 / 0.25), 0 6px 18px rgb(58 45 34 / 0.18);
+    --shadow-float: 0 4px 14px rgb(20 12 6 / 0.35), 0 18px 50px rgb(20 12 6 / 0.35);
 
     --animate-bob: bob 2.4s ease-in-out infinite;
     --animate-flicker: flicker 2.8s ease-in-out infinite;
-    --animate-page-in: pageIn 0.5s ease-out both;
+    --animate-page-in: pageIn 0.45s ease-out both;
+    --animate-rise: rise 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+    --animate-fade: fadeIn 0.35s ease-out both;
+    --animate-shake: shake 0.4s ease-in-out both;
+    --animate-pop: pop 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.4) both;
+    --animate-glint: glint 2.6s ease-in-out infinite;
+    --animate-quill: quill 1.6s ease-in-out infinite;
 
     @keyframes bob {
         0%, 100% { transform: translateY(0); }
@@ -44,6 +55,33 @@
     @keyframes pageIn {
         from { opacity: 0; transform: translateY(0.6rem); }
         to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes rise {
+        from { opacity: 0; transform: translateY(0.9rem) scale(0.97); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+    @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        20% { transform: translateX(-6px); }
+        40% { transform: translateX(5px); }
+        60% { transform: translateX(-4px); }
+        80% { transform: translateX(2px); }
+    }
+    @keyframes pop {
+        from { opacity: 0; transform: scale(0.6); }
+        to { opacity: 1; transform: scale(1); }
+    }
+    @keyframes glint {
+        0%, 100% { box-shadow: 0 0 0 0 rgb(240 198 81 / 0); }
+        50% { box-shadow: 0 0 0 6px rgb(240 198 81 / 0.28); }
+    }
+    @keyframes quill {
+        0%, 100% { transform: translate(0, 0) rotate(-8deg); }
+        50% { transform: translate(6px, -3px) rotate(4deg); }
     }
 }
 
@@ -63,7 +101,34 @@ body {
     background-attachment: fixed;
 }
 
-/* parchment surface with grain and a warm vignette */
+/* a flex or grid child may always shrink: long words must wrap, not push the page sideways */
+* {
+    min-width: 0;
+}
+
+button, [role="button"], a {
+    -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+    outline: 2px solid var(--color-gold-bright);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/* surfaces                                                            */
+/* ------------------------------------------------------------------ */
+
+/* parchment: grain and a warm vignette */
 .parchment {
     background-color: var(--color-parchment);
     background-image:
@@ -84,10 +149,30 @@ body {
         var(--shadow-page);
 }
 
-/* ink-on-paper text rhythm for story prose */
+/* a page laid over the world: parchment you can almost see through */
+.page-float {
+    background-color: rgb(247 236 212 / 0.95);
+    background-image:
+        radial-gradient(ellipse at 18% 12%, rgb(255 252 240 / 0.6), transparent 55%),
+        radial-gradient(ellipse at 85% 90%, rgb(196 164 105 / 0.22), transparent 60%);
+    border: 1px solid rgb(124 84 51 / 0.45);
+    box-shadow: inset 0 0 30px rgb(160 124 66 / 0.18), var(--shadow-float);
+    backdrop-filter: blur(6px);
+}
+
+/* smoked glass, for the small things that sit on the world all the time */
+.glass {
+    background: rgb(36 26 18 / 0.62);
+    border: 1px solid rgb(247 236 212 / 0.16);
+    box-shadow: 0 4px 18px rgb(0 0 0 / 0.3);
+    backdrop-filter: blur(8px);
+    color: var(--color-parchment);
+}
+
+/* ink-on-paper rhythm for story prose */
 .prose-story {
-    font-size: 1.09rem;
-    line-height: 1.75;
+    font-size: 1.12rem;
+    line-height: 1.72;
     letter-spacing: 0.005em;
 }
 
@@ -105,23 +190,201 @@ body {
     color: var(--color-ember-deep);
 }
 
-/* dashed underline for tappable vocabulary */
-.vocab-word {
-    color: var(--color-ember-deep);
-    font-weight: 600;
-    text-decoration: underline dashed rgb(150 64 15 / 0.55);
-    text-decoration-thickness: 1.5px;
-    text-underline-offset: 3px;
-    cursor: pointer;
-    border-radius: 3px;
-}
-
-.vocab-word:hover {
-    background: rgb(201 158 44 / 0.18);
-}
-
 /* thin scrollbars that look like they belong on paper */
 .scroll-ink {
     scrollbar-width: thin;
     scrollbar-color: rgb(124 84 51 / 0.5) transparent;
+}
+
+/* ------------------------------------------------------------------ */
+/* words                                                               */
+/* ------------------------------------------------------------------ */
+
+/* a tappable word of the language being learned, wherever story text appears */
+.wb-word {
+    display: inline;
+    padding: 0 1px;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-weight: 600;
+    color: var(--color-ember-deep);
+    text-decoration: underline dotted rgb(150 64 15 / 0.6);
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 3px;
+    cursor: pointer;
+    border-radius: 3px;
+    pointer-events: auto;
+    transition: background 0.15s ease;
+}
+
+.wb-word:hover {
+    background: rgb(201 158 44 / 0.22);
+}
+
+/* a word the dictionary could not place: still in the target language, but nothing to tap */
+.wb-word-plain {
+    font-weight: 600;
+    color: var(--color-ember-deep);
+}
+
+/* a whole phrase or sentence in the target language */
+.wb-tl {
+    background: linear-gradient(transparent 62%, rgb(201 158 44 / 0.2) 62%);
+    border-radius: 2px;
+}
+
+.wb-tl-gloss {
+    display: block;
+    font-size: 0.86em;
+    font-style: italic;
+    color: var(--color-ink-soft);
+    line-height: 1.35;
+    margin: 0.1em 0 0.35em;
+}
+
+.wb-tl-peek {
+    display: inline-block;
+    margin-left: 0.3em;
+    padding: 0 0.4em;
+    border: 1px solid rgb(124 84 51 / 0.35);
+    border-radius: 999px;
+    background: rgb(255 252 240 / 0.6);
+    font-family: var(--font-hand);
+    font-size: 0.95em;
+    line-height: 1.25;
+    color: var(--color-ink-soft);
+    cursor: pointer;
+    vertical-align: baseline;
+}
+
+.wb-tl-peek:hover {
+    background: #fffaf0;
+    color: var(--color-ink);
+}
+
+/* ------------------------------------------------------------------ */
+/* names and words floating over the 3D world (engine/labels.ts)       */
+/* ------------------------------------------------------------------ */
+
+.wb-labels {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.wb-label {
+    position: absolute;
+    left: 0;
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    transform-origin: 50% 100%;
+    transition: opacity 0.25s ease;
+    will-change: transform;
+    white-space: nowrap;
+    text-align: center;
+}
+
+.wb-label-title {
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    line-height: 1.1;
+    color: #fffaf0;
+    text-shadow: 0 1px 2px rgb(20 12 6 / 0.95), 0 0 8px rgb(20 12 6 / 0.7);
+}
+
+.wb-label-subtitle {
+    font-family: var(--font-hand);
+    font-size: 0.95rem;
+    line-height: 1;
+    color: #f2dfae;
+    text-shadow: 0 1px 2px rgb(20 12 6 / 0.95);
+}
+
+.wb-label-enemy .wb-label-title { color: #ffd9cf; }
+.wb-label-gate .wb-label-title { color: #fff1c9; font-size: 1.05rem; }
+.wb-label-landmark .wb-label-title { font-size: 0.8rem; opacity: 0.85; }
+
+/* the word for a thing, in the language being learned */
+.wb-label-word {
+    pointer-events: auto;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2px 10px 3px;
+    border-radius: 999px;
+    border: 1.5px solid rgb(201 158 44 / 0.9);
+    background: rgb(247 236 212 / 0.94);
+    color: var(--color-ember-deep);
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 1.05rem;
+    line-height: 1.15;
+    box-shadow: 0 2px 8px rgb(20 12 6 / 0.35);
+    transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.wb-label-word:hover {
+    transform: scale(1.06);
+    background: #fffaf0;
+}
+
+.wb-label-hint {
+    font-size: 0.7rem;
+    font-weight: 400;
+    color: var(--color-ink-soft);
+    line-height: 1;
+}
+
+.wb-label-sought {
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--color-gold);
+    color: var(--color-night);
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    box-shadow: 0 0 0 2px #fffaf0, 0 2px 8px rgb(20 12 6 / 0.5);
+    animation: bob 1.6s ease-in-out infinite;
+}
+
+/* something said aloud as the hero passes */
+.wb-label-bark {
+    max-width: 17rem;
+    white-space: normal;
+    padding: 7px 13px 8px;
+    border-radius: 14px;
+    background: rgb(255 250 240 / 0.96);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+    font-size: 1rem;
+    line-height: 1.3;
+    box-shadow: 0 3px 12px rgb(20 12 6 / 0.35);
+    pointer-events: auto;
+}
+
+.wb-label-bark::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -7px;
+    width: 14px;
+    height: 14px;
+    transform: translateX(-50%) rotate(45deg);
+    background: rgb(255 250 240 / 0.96);
+    border-radius: 2px;
+}
+
+.wb-bark-gloss {
+    margin-top: 2px;
+    font-size: 0.8rem;
+    font-style: italic;
+    color: var(--color-ink-faint);
 }

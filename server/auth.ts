@@ -1,24 +1,33 @@
 import "server-only";
+import { and, eq } from "drizzle-orm";
 import { auth } from "@/auth/auth";
 import { db } from "@/db";
-import { stories, type Story } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { books, users, type Book, type User } from "@/db/schema";
 
-/**
- * Every server action begins here. Nothing in the game layer trusts a client-
- * supplied user id — identity always comes from the session.
+/*
+ * Every server action starts here. Identity comes only from the session,
+ * never from anything the browser sends.
  */
-export async function requireUser(): Promise<{ userId: string }> {
+
+export async function requireUser(): Promise<{ userId: string; user: User }> {
     const session = await auth();
     const userId = session?.user?.id;
-    if (!userId) throw new Error("You must be signed in.");
-    return { userId };
+    if (typeof userId !== "string" || userId === "") throw new Error("You must be signed in.");
+    const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+    // a session outliving its account is the same as no session
+    if (!user) throw new Error("You must be signed in.");
+    return { userId, user };
 }
 
-/** loads a story only if the signed-in user owns it */
-export async function requireStory(storyId: string): Promise<{ userId: string; story: Story }> {
-    const { userId } = await requireUser();
-    const story = await db.query.stories.findFirst({ where: eq(stories.id, storyId) });
-    if (!story || story.userId !== userId) throw new Error("Story not found.");
-    return { userId, story };
+/**
+ * The book, only if it belongs to the signed-in player. A book that does not
+ * exist and a book that belongs to someone else give the same answer, so ids
+ * cannot be probed.
+ */
+export async function requireBook(bookId: string): Promise<{ userId: string; user: User; book: Book }> {
+    const { userId, user } = await requireUser();
+    if (typeof bookId !== "string" || bookId === "") throw new Error("Book not found.");
+    const book = await db.query.books.findFirst({ where: and(eq(books.id, bookId), eq(books.userId, userId)) });
+    if (!book) throw new Error("Book not found.");
+    return { userId, user, book };
 }
