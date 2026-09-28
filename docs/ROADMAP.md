@@ -60,19 +60,27 @@ item names it. They are ordered by how much they matter before other people are 
 
 ## 3. The story
 
-- **Items.** The hero owns nothing. An `items` table, a "give" and "take" effect in the director's
-  output, and a satchel tab in the journal would let promises be kept with things.
-- **Endings that differ.** The book ends when the last chapter turns. The threads a player
-  resolved, dropped or never found are all in `threads`; the final chapter prompt could be given
-  them and asked for the ending this reader earned.
-- **Characters who move.** The director can change what a character wants but not where they
-  stand. Add `move` to its shifts, with the target chosen from free `npcSlots` of the layout.
+- **More kinds of goal.** The loop is a checklist of goals, and a new behaviour is a new kind
+  (`game/goals.ts`). Candidates: *deliver* (bring something the hero carries to someone), *say it
+  in the language* (a talk that only counts if managed in the language being learned), *learn
+  words* (so many new words before the story moves on), *choose* (the reader picks between two
+  roads, where now only a failure bends one).
+- **Things the hero carries** are remembered (`books.belongings`) and told to every prompt, but
+  nothing can yet be given away, used up or lost.
+- **Endings that differ.** Where each chapter ends is fixed by the outline, so every reader
+  reaches the same ending by their own road. The last chapter's goals are already written
+  knowing every failure along the way (`storySoFar`); its description could be allowed to bend
+  too, for the ending this reader earned.
+- **Goals written ahead.** A chapter's goals are written when the chapter begins (fifteen to
+  twenty-five seconds). Writing the next chapter's goals while the reader plays the last goals
+  of this one would take the wait out of turning the page, at the cost of a call wasted
+  whenever a late failure changes what the next chapter must know.
 - **Promises kept.** A character remembers a promise (`memories.kind = "promise"`), and the two
   newest are in every prompt, but nothing ever sets `memories.resolved`. Add `keptPromise` to the
   character's turn (the key of a promise shown in the brief), mark it, and let affinity rise.
-- **Two tabs at once.** `turnChapter` checks that the chapter is ready and then writes; the same
-  book open in two tabs could turn the page twice. Claim the turn first, as the forge and the
-  director do (a conditional `update … returning`).
+- **Two tabs at once.** A claim on the book (`writingSince`) keeps two requests from writing the
+  same pages or goals twice, and a goal can be settled only once. What two tabs can still do is
+  show different things: the second tab learns of what the first did only when it next asks.
 
 ## 4. Learning
 

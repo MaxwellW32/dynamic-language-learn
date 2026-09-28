@@ -74,7 +74,7 @@ game/               pure logic shared by server and browser: languages, looks, s
                     dictionary shapes, spaced repetition, challenges, region layout
 server/
   ai/               the one door to the model, prompts, output contracts, prices
-  services/         game rules: forge, scene, dialogue, memory, narration, director, quests,
+  services/         game rules: forge, scene, dialogue, memory, narration, story, goals, cast,
                     encounters, chapters, learning, dictionary, study, wallet
   actions/          "use server" wrappers: parse input → who is asking → service → Result
   payments/         payment providers behind one interface
@@ -104,8 +104,9 @@ tests/              unit tests for the pure logic
 | `node scripts/newBook.mjs [language]` | create a book through the wizard, in a browser |
 | `node scripts/playthrough.mjs <bookId>` | play a book in a browser, with screenshots |
 | `node scripts/shots.mjs` | screenshot a dozen made-up regions of the engine |
-| `npx tsx --conditions=react-server scripts/checkStory.ts es` | forge and play a book with no browser |
-| `npx tsx --conditions=react-server scripts/checkGrowth.ts it --chapters=2 --grow` | play a book until its chapters turn, and list what went wrong |
+| `npx tsx --conditions=react-server scripts/checkStory.ts es` | make a book with no browser and print its outline, people and goals |
+| `npx tsx --conditions=react-server scripts/checkGrowth.ts it --chapters=2 --fail=persuade` | play a book goal by goal until its chapters turn, failing one on purpose, and list what went wrong |
+| `npx tsx --conditions=react-server scripts/checkCast.ts` | walk a made-up person into a story, across it and out again (no model call) |
 | `npx tsx --conditions=react-server scripts/relabel.ts --show` | print every language's world labels; refresh them in existing books |
 | `npx tsx scripts/usageReport.ts` | what the model calls have taken and cost |
 
@@ -119,7 +120,8 @@ Measured with the default models (September 2026 prices):
 | A conversation turn | 1 | about 0.4 cents, once the prompt prefix is cached |
 | Examining something, arriving somewhere | 1 | about 0.7 cents, first time only |
 | A battle | 0 (1 for a victory page over an elite or boss) | nothing, or 0.7 cents |
-| The director | 1, every so often, on the cheap model | about 0.05 cents |
+| A chapter's goals | 1 per chapter, and 1 more each time a goal fails | about 2 cents |
+| A page the storyteller tells | 1 for each run of pages | about half a cent |
 | Turning a chapter | 1 (3 if the story opens a new place) | about 1 cent (6 with a new place) |
 | A whole first chapter, forge included | about 30 | about 23 cents |
 | Looking up, hearing or studying a word | 0 after the first time anyone heard it | nothing |

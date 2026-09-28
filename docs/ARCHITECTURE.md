@@ -13,7 +13,7 @@ changing anything structural.
 
 ## 1. Principles
 
-1. **The database is the world.** Every noun — character, memory, place, quest, word, wallet — is a
+1. **The database is the world.** Every noun — character, memory, place, goal, word, wallet — is a
    table. The AI reads small *queried* slices and returns *structured changes*; it never owns state.
 2. **The server is the game master's desk.** The browser sends intents (talk, fight, answer,
    travel). The server checks ownership and plausibility, applies the rules, saves, and replies.
@@ -77,10 +77,10 @@ See `db/schema.ts`; every table and unusual column is commented there. The shape
 | Dictionary | `dict_entries` (813k headwords), `dict_forms` (5.8M written forms → headword) |
 | Learner | `learner_profiles`, `word_progress`, `challenge_attempts`, `saved_phrases` |
 | Money | `credit_ledger` (append-only), `ai_usage` (one row per model call), `topups`, `tts_cache` |
-| Book | `books`, `chapters`, `passages`, `events` (the chronicle), `threads` (open story threads) |
+| Book | `books`, `chapters` (the outline), `goals` (each chapter's checklist), `passages`, `events` (the chronicle) |
 | World | `regions`, `buildings`, `landmarks`, `gates` |
 | People | `characters`, `memories`, `relationships`, `conversations`, `messages` |
-| Conflict | `enemies`, `encounters`, `quests`, `quest_objectives` |
+| Conflict | `enemies`, `encounters` |
 
 Coordinates are metres on the ground plane: `x` east, `z` south. A facing angle `rot` looks along
 `(sin rot, cos rot)`. Height is never stored — it comes from the terrain.
@@ -188,13 +188,13 @@ retries once, records an `ai_usage` row with token counts and cost, and charges 
 
 | Tier | Default model | Used for |
 |---|---|---|
-| `story` | `gpt-6-sol` | dialogue, narration, the forge, chapter turns |
-| `scribe` | `gpt-6-luna` | summaries, memory consolidation, the director's bookkeeping, word resolution |
+| `story` | `gpt-6-sol` | dialogue, the storyteller's pages, the forge, the outline and the goals |
+| `scribe` | `gpt-6-luna` | summaries, memory consolidation, word resolution |
 
 Override with `OPENAI_MODEL_STORY` / `OPENAI_MODEL_SCRIBE`. Prices live in `server/ai/pricing.ts`.
 
 Both models are asked for **no reasoning effort** on everything a player waits for (dialogue,
-narration, the forge) and a little on the director and chapter turns. Measured: leaving the
+pages, the forge) and a little on the outline and the goals, which are plans. Measured: leaving the
 setting out runs at "medium" and triples the wait; these models reject "minimal".
 
 A book begins from **sparks** drawn by lot from its seed (`game/sparks.ts`): a kind of country, what
@@ -203,9 +203,10 @@ Asked to invent a story from nothing, the model wrote the same one every time (s
 row about a bell and a loaf); asked to build one around a kite, a salt marsh and a road that is
 longer going home, it cannot. What the reader asks for in their own words outranks the sparks.
 
-Forging a book is four calls: the idea; then the people and everything else side by side; then
-the opening. Written as one request, the world took a minute and a half. Measured now: about 65
-seconds of writing (11 + 40 + 12) and 80 from the button to the first page. The model's writing
+Making a book is five calls: the idea; then the people and everything else side by side; then
+the outline of the whole story with the goals of its first chapter; then the first page.
+Written as one request, the world alone took a minute and a half. Measured now: about 85
+seconds of writing (13 + 41 + 24 + 5) and 90 from the button to the first page. The model's writing
 speed, some 58 tokens a second, is what is left. The forge runs as one long server action; the
 screen that waits on it asks `GET /api/books/[bookId]/forge` how far along it is, because a
 second server action would queue behind the first.
@@ -216,8 +217,10 @@ OpenAI caches prompt prefixes of 1,024 tokens or more and bills cached input at 
 price. Every prompt is therefore laid out stable-first:
 
 1. the rulebook — how to write segments, the immersion ladder (identical for every call)
-2. the book's **bible** — title, premise, tone, the world's fixed facts (changes only at chapter turns)
-3. the character sheet, for dialogue (changes rarely)
+2. the book's **bible** — title, premise, tone, the world's fixed facts, its places and people
+   (changes when a chapter begins, or someone new enters the story)
+3. the **outline**, for the storyteller and the planner, or the **character sheet**, for a person
+   (neither ever changes; no character is ever shown the outline)
 4. *then* everything that moves: memories, recent lines, the scene, offered words, the player's message
 
 Parts 1–3 go in `instructions`, part 4 in `input`, and `prompt_cache_key` is set to the book (and
@@ -225,7 +228,8 @@ character), so consecutive turns of a conversation reuse the same cached prefix.
 
 The provider places the output schema, and the name it is sent under, *before* the instructions.
 Two tasks therefore share a cache only if they share both: a greeting is asked for in the shape
-of any other turn (`schemaName: "character-turn"`), and every kind of narration is `"narration"`.
+of any other turn, and so is the answer a person gives when asked for one
+(`schemaName: "character-turn"`); every page the storyteller writes is a `"telling"`.
 
 ### Memory
 
@@ -250,39 +254,67 @@ holds more than forty, the scribe consolidates the oldest minor ones into a few 
 `rumor` memory of it — by rule, with no model call. Defeat the thing in the woods and the innkeeper
 has heard by the time you walk back.
 
-### The director (the feedback loop)
+### The story: an outline, and a checklist
 
-`events` carry an importance. Each adds to `books.significance`; when that crosses a threshold —
-and always when a quest resolves — the director runs once on the scribe tier. It reads the bible,
-the open `threads`, the recent chronicle and the quest state, and returns structured changes:
-threads opened, advanced or resolved; a new quest; a character's goal or mood shifting; a note to
-the narrator about where to lean next. Code applies those changes after validating every reference.
-This is how a choice in chapter one still matters in chapter four without the whole history being
-resent every turn.
+The whole loop is this, and is meant to stay this small:
 
-### Quests, choices and chapters
+1. **A book is outlined when it is made**: five to seven chapters, each with a title, a stage
+   (introduction, rising, climax, falling, resolution) and a description of what it is for and
+   where it must end. The outline never changes. *Where a chapter ends is fixed; how the hero gets
+   there is not.* The reader never sees a description, or a chapter they have not reached.
+2. **Entering a chapter writes all of its goals, at once** (`goals` table): one call, which also
+   says what happened in the chapter that has just ended.
+3. **Goals are taken one at a time, in order.** There are six kinds:
 
-A chapter ends when every quest of its stage is settled, completed or lost
-(`isChapterTurnReady`). Everything else follows from keeping that always possible:
+   | Kind | What it is | How it ends |
+   |---|---|---|
+   | `tell` | the storyteller tells the reader something: the goal is a *pointer*, the page is written when it comes due | told; never shown in the checklist |
+   | `visit` | go to a region, or walk up to a building or landmark | on arriving; a column of light marks the place |
+   | `talk` | speak with someone about something | they answer for themselves |
+   | `persuade` | win someone over | they answer for themselves, yes or no |
+   | `fight` | best a creature | won, or driven back. Backing away settles nothing |
+   | `examine` | look closely at a landmark | on looking |
 
-- **Steps have an order** (`game/quests.ts`). What can be done again (a talk, a visit, a look)
-  waits its turn, so "return to Marta" is not done by having met her. A creature bested or a word
-  learned counts whenever it happens, because it may not be possible twice. Steps that are not
-  yet due are shown dimmed, and only the next step is marked in the world.
-- **Progress is applied before anything is skipped.** Examining a landmark a second time rereads
-  its page for nothing, but still counts for a quest given since. A visit to where the hero
-  already stands is dropped when a quest is written and completed when it comes due.
-- **Words are learned in three places**: a battle, the study hall, and by using them rightly in
-  conversation. All three count toward "learn some words".
-- **A chapter always has a quest** (`standingQuest`), holds five at most, and the director may
-  add one only while the chapter is still under way.
-- **The reader can let a quest go** (journal → quests). It is lost, the story is told, and the
-  chapter stops waiting for it.
-- **Turning points end in a choice.** The page written when a quest resolves offers two or three
-  ways on; what is chosen is written as the next page and entered in the chronicle with weight,
-  which is where the director finds it. Examining something offers a choice when it invites one.
+4. **A goal that fails is not a dead end.** It is crossed out, kindly; the goals that were to
+   follow are dropped; and the road from there to the chapter's fixed end is written again, in
+   one call (`mend`). A failure is mended even on a chapter's last goal.
+5. **When every goal is settled the page can be turned**, and step 2 begins again.
 
-`scripts/checkGrowth.ts` plays all of this through with real model calls and lists what broke.
+`whatIsDue` (`game/goals.ts`, pure, tested) says which of these is next; `advance`
+(`server/services/story.ts`) does whatever falls to the book rather than the reader, and stops.
+A claim on the book (`writingSince`) keeps two requests from writing the same thing twice.
+
+**People answer for themselves.** When the goal in hand is someone's to settle, walking up to
+them opens the conversation with that at stake: the panel says what the hero has come for, shows
+what the person warms to and is put off by, and how they are leaning (`lean`, -5 to 5, which
+they report themselves with each reply). They may decide of their own accord — agree if truly
+won, or end the talk if insulted or pushed — and the hero may **ask for their answer**, which is
+one more turn of the same conversation in which they must say yes or no. Nothing judges them
+from outside. Nobody is won or lost by the first thing said to them (`decisionStands`).
+
+**Writing to someone from afar.** Anyone the hero has met can be written to from anywhere, at
+any time (journal → People). Nothing is ever at stake from afar: a goal is settled face to face.
+
+**The world changes only through a goal's fields.** The storyteller's pages are words and move
+nothing. A goal may say what the hero `gains` (kept in `books.belongings`, and told to every
+later prompt), whom it `moves` (to another region, or out of the book), and who `enters` at it.
+Someone written mid-story is given somewhere to stand at once (`game/worldgen/spots.ts`) but
+stays off stage, in nobody's scene, until the goal that brings them in comes due. Someone who
+leaves keeps their key, so that nobody else's shifts.
+
+**What the book remembers of itself** (`storySoFar`) is the summary of every chapter behind the
+hero and the outcome of every goal of the chapter in hand, one line each: nothing falls out of
+it for having happened long ago. It is given to the planner and the storyteller. Characters are
+given only what they would know: their own memories, and what has reached them as gossip.
+
+**Model calls, all told**: the outline, once; a chapter's goals, once a chapter; a run of pages,
+when tells come due (those that follow one another are written in one request); a road mended,
+once a failure; and the conversations themselves. Walking, arriving, fighting and rereading cost
+nothing.
+
+`scripts/checkGrowth.ts` plays all of this through with real model calls, failing a goal on
+purpose if asked, and lists what broke. `scripts/checkCast.ts` checks people entering, moving
+and leaving, with no model call.
 
 ### What costs nothing at play time
 
@@ -301,7 +333,7 @@ by **gates**. A region is rebuilt from its `seed` on every device:
   browser uses the identical layout to build the terrain.
 - `game/worldgen/terrain.ts` raises the ground: rolling swells, rough detail away from paths, a rim
   of hills (or open sea) closing the region in, passes cut where gates are open.
-- A chapter turn may add a region, which opens a gate in one that is already peopled. Nothing
+- A new chapter may add a region, which opens a gate in one that is already peopled. Nothing
   placed there may move, and the new road may run into none of it: so the road to each of the
   four gates is drawn from the start, a closed side shows only its first stretch as a lane, and
   buildings, landmarks and water keep clear of all four.
@@ -327,8 +359,11 @@ Plain three.js, driven imperatively; React only draws the HUD on top.
 
 Walking into a creature starts an **encounter**: a staged plan of challenges built deterministically
 from the vocab planner (due words first). Each correct answer is a spell cast; each miss costs a
-heart. Out of hearts, the hero retreats — the creature stays. Ordinary creatures return after a
-while, so there is always something to practise on; quest targets and bosses do not.
+heart. Out of hearts, the hero is driven back — the creature stays. Ordinary creatures return after a
+while, so there is always something to practise on. The creature a goal points at is brought
+back when the goal comes due and does not wander off again; losing to it fails the goal, and
+backing away does not. A creature takes a few seconds to notice anyone, so the hero is not set
+upon the instant a place is entered.
 
 ---
 

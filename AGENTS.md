@@ -33,10 +33,12 @@ called done**. Do not rely on reading code when a screen or a flow can be run.
   made-up region with no story, database or model call. `node scripts/shots.mjs` screenshots a
   dozen of them.
 - **The story without a browser:** `npx tsx --conditions=react-server scripts/checkStory.ts es`
-  forges a book and plays its first minutes, printing what each step wrote, took and cost.
-  `scripts/checkGrowth.ts [lang] [--chapters=2] [--grow] [--keep]` plays on until the chapter
-  turns (every quest done, forks taken, a long conversation, a new region) and ends with a list
-  of problems found. Run it after touching quests, the director, chapters, memory or the forge.
+  makes a book and prints its outline, its people, its first chapter's goals and first pages.
+  `scripts/checkGrowth.ts [lang] [--book=<id>] [--chapters=2] [--fail=persuade|fight|talk] [--keep]`
+  plays a book goal by goal until its chapters turn, and ends with a list of problems found;
+  `--fail` fails a goal on purpose, so that the road is written again. Run it after touching
+  goals, the planner, the storyteller, conversations or the forge. `scripts/checkCast.ts` walks a
+  made-up person into a story, across it and out again, with no model call.
   For logic, prefer these to screenshots: reading a PNG costs about as much as a page of text
   and proves only what is on the screen.
 - **What it has cost:** `npx tsx scripts/usageReport.ts`.
@@ -103,15 +105,30 @@ called done**. Do not rely on reading code when a screen or a flow can be run.
 - **Region layout is a pure function of (seed, kind, biome, open gate sides)**
   (`game/worldgen/layout.ts`). Changing how it draws random numbers moves every building in every
   existing book: people would be standing inside walls. **Only the roads may depend on which
-  gates are open**: a chapter turn can open a gate in a region that is already peopled, so the
+  gates are open**: a new chapter can open a gate in a region that is already peopled, so the
   road to every gate is drawn and kept clear from the start (`tests/layout.test.ts` holds this).
 - **Tasks that share a schema must share a `schemaName`** (`server/ai/client.ts`). The provider
   puts the schema and its name in front of the prompt; a greeting and a reply, or two kinds of
   narration, only reuse each other's cached prefix if both are identical.
-- **A chapter ends when every quest of its stage is settled** (`isChapterTurnReady`). So a
-  chapter must always have a quest (`standingQuest`), the director may not add one to a chapter
-  that has just been finished, and every objective must be possible: progress is applied before
-  anything is reread or skipped.
+- **The story is a checklist, and the loop is small on purpose.** A book is outlined once, when
+  it is made: chapters with a title and a description, fixed from then on. Entering a chapter
+  writes all of its goals at once; they are taken **one at a time, in order**; a goal that fails
+  has the goals after it written again (`mend`). What is due next is decided by one pure
+  function, `whatIsDue` (`game/goals.ts`), and done by `advance` (`server/services/story.ts`).
+  Read both before adding anything. Do not add a second thing that decides what the story does
+  next: no director, no side quests, no forks. New behaviour is a new **kind of goal**.
+- **A chapter must always be able to end.** Every goal must be possible with what exists
+  (`persistGoals` drops those that are not), a chapter with no goals is given a tell
+  (`standingTell`), and a failure is always mended, even on the chapter's last goal.
+- **The storyteller's pages move nothing.** Whatever the story changes is written in a goal's
+  fields and applied when the goal is done: `gains` (what the hero now carries), `moves` (who
+  goes where, or leaves), `enters` (who steps on stage). A person written mid-story is off
+  stage, and in nobody's scene, until a goal brings them in.
+- **People answer for themselves.** Nothing judges a conversation from outside: the person says
+  where they stand (`lean`) and gives their own `decision`, when asked for it or sooner. Nothing
+  is ever settled from afar (`remote`).
+- **A creature may catch the hero at any moment**, including the moment something else is
+  opening. Anything the client waits on must `hold()` the world first (`components/game/useGame.ts`).
 - **Schema changes:** edit `db/schema.ts`, then `npm run db:push`. Additive changes only without
   asking. The dictionary tables hold 6.6M rows — never drop them; `npm run dict:import` upserts.
 - Lint forbids `setState` directly inside an effect. Derive the value, or set it from the

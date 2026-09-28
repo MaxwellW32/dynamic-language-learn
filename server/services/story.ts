@@ -283,6 +283,11 @@ async function work(ctx: AiContext, bookId: string): Promise<Told[]> {
         const all = await chaptersOf(book.id);
         const chapter = chapterInHand(all);
         if (!chapter) return [];
+        // a book made before outlines has nothing to be planned from: say so, rather than write goals for a chapter
+        // that could never be turned
+        if (chapter.status !== "open" || chapter.description.trim().length === 0) {
+            throw new Error("This book was begun before the story was rebuilt, and has no outline to go on from. Begin a new book.");
+        }
         const list = await goalsOf(chapter.id);
         const due = whatIsDue(list);
 
