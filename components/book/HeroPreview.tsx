@@ -32,8 +32,12 @@ export function HeroPreview({ look, className = "" }: { look: ActorLook; classNa
             renderer.toneMapping = THREE.NeutralToneMapping;
             renderer.shadowMap.enabled = true;
             renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            // The canvas is laid over its holder and takes no part in the layout. It is drawn in device pixels,
+            // and left to find its own size it would be as large as that: on any screen that is not at 100%
+            // it is then bigger than the holder, the holder grows to fit it, the bigger holder is measured,
+            // the canvas is made bigger still — and the page runs away downward.
+            Object.assign(renderer.domElement.style, { position: "absolute", inset: "0", width: "100%", height: "100%", display: "block" });
             element.appendChild(renderer.domElement);
-            renderer.domElement.style.display = "block";
 
             const scene = new THREE.Scene();
             const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
@@ -115,5 +119,6 @@ export function HeroPreview({ look, className = "" }: { look: ActorLook; classNa
         };
     }, []);
 
-    return <div ref={holder} className={className} aria-label="Your hero" role="img" />;
+    // relative and clipped: whatever is inside stays inside, and the holder's size is its own
+    return <div ref={holder} className={`relative overflow-hidden ${className}`} aria-label="Your hero" role="img" />;
 }

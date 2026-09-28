@@ -6,27 +6,27 @@ import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { LEVEL_NAMES } from "@/game/dictionary";
 import { isLangCode, LANGUAGES } from "@/game/languages";
 import type { SatchelWord } from "@/game/payloads";
-import toast from "react-hot-toast";
-import { abandonQuestAction, satchelAction } from "@/server/actions/game";
+import { satchelAction } from "@/server/actions/game";
 import { LangMark } from "@/components/ui/LangMark";
 import { Chip, Meter } from "@/components/ui/Panel";
 import { StoryText } from "@/components/words/StoryText";
 import { mergeCardsAtom, openWordAtom } from "@/components/words/store";
+import { GOAL_ICON } from "./Hud";
 import {
-    bookAtom, chapterTurnReadyAtom, chaptersAtom, chronicleAtom, journalAtom, learnerAtom, passagesAtom, questsAtom,
-    readingAtom, regionsAtom, type JournalTab,
+    bookAtom, chaptersAtom, chronicleAtom, journalAtom, learnerAtom, modeAtom, passagesAtom, peopleAtom,
+    regionsAtom, storyAtom, type JournalTab,
 } from "./state";
 import { useGame } from "./useGame";
 
 const TABS: { key: JournalTab; label: string; icon: string }[] = [
     { key: "story", label: "The story", icon: "📖" },
-    { key: "quests", label: "Quests", icon: "📜" },
+    { key: "goals", label: "Goals", icon: "📜" },
+    { key: "people", label: "People", icon: "✉️" },
     { key: "words", label: "Words", icon: "✦" },
     { key: "map", label: "Places", icon: "🧭" },
     { key: "chronicle", label: "Chronicle", icon: "🕯️" },
 ];
 
-const KIND_ICON: Record<string, string> = { talkTo: "💬", persuade: "🎭", defeat: "⚔️", visit: "🧭", inspect: "🔎", learnWords: "✦" };
 const REGION_ICON: Record<string, string> = { settlement: "🏘️", wilds: "🌲", depths: "🕳️" };
 
 /** the book itself: everything written so far, and everything it is keeping track of */
@@ -69,16 +69,21 @@ export function Journal() {
                             role="tab"
                             aria-selected={tab === t.key}
                             onClick={() => setTab(t.key)}
-                            className={`px-3 sm:px-4 py-1.5 font-display text-lg whitespace-nowrap cursor-pointer rounded-t-md border border-b-0 transition-colors ${tab === t.key ? "bg-[#fffaf0]/80 border-wood/30 text-ink" : "border-transparent text-ink-soft hover:text-ink"}`}
+                            aria-label={t.label}
+                            title={t.label}
+                            // never squeezed: six tabs on a phone scroll sideways, and only the open one spells out its name
+                            className={`shrink-0 px-3 sm:px-4 py-1.5 font-display text-lg whitespace-nowrap cursor-pointer rounded-t-md border border-b-0 transition-colors ${tab === t.key ? "bg-[#fffaf0]/80 border-wood/30 text-ink" : "border-transparent text-ink-soft hover:text-ink"}`}
                         >
-                            <span className="mr-1.5" aria-hidden>{t.icon}</span>{t.label}
+                            <span aria-hidden>{t.icon}</span>
+                            <span className={`ml-1.5 ${tab === t.key ? "" : "hidden sm:inline"}`}>{t.label}</span>
                         </button>
                     ))}
                 </nav>
 
                 <div className="flex-1 overflow-y-auto scroll-ink px-4 sm:px-8 py-4">
                     {tab === "story" && <Story />}
-                    {tab === "quests" && <Quests />}
+                    {tab === "goals" && <Goals />}
+                    {tab === "people" && <People />}
                     {tab === "words" && <Words />}
                     {tab === "map" && <Places />}
                     {tab === "chronicle" && <Chronicle />}
@@ -93,9 +98,6 @@ function Story() {
     const chapters = useAtomValue(chaptersAtom);
     const passages = useAtomValue(passagesAtom);
     const learner = useAtomValue(learnerAtom);
-    const setReading = useSetAtom(readingAtom);
-    const setTab = useSetAtom(journalAtom);
-    const game = useGame();
     const gloss = (learner?.immersion ?? 0) >= 3 ? "peek" as const : "below" as const;
 
     return (
@@ -111,35 +113,13 @@ function Story() {
                         </h3>
                         {chapter.summary && <p className="text-center text-sm text-ink-soft italic mt-1 mb-3">{chapter.summary}</p>}
                         <div className="mt-3">
-                            {pages.map((page, i) => {
-                                const open = page.choices && page.chosenKey === null;
-                                const taken = page.choices?.find((c) => c.key === page.chosenKey);
-                                return (
-                                    <div key={page.id} className="mb-4">
-                                        <p className={`prose-story ${i === 0 ? "drop-cap" : ""}`}>
-                                            <StoryText segments={page.segments} gloss={gloss} />
-                                        </p>
-                                        {taken && (
-                                            <p className="font-hand text-lg text-ink-soft mt-1 pl-4 border-l-2 border-gold/60">
-                                                you chose: <StoryText segments={taken.label} />
-                                            </p>
-                                        )}
-                                        {open && (
-                                            <button
-                                                type="button"
-                                                className="mt-1 font-hand text-lg text-ember-deep underline underline-offset-2 cursor-pointer"
-                                                onClick={() => {
-                                                    setTab(null);
-                                                    setReading(page);
-                                                    game.setMode("reading");
-                                                }}
-                                            >
-                                                this moment still waits for your choice →
-                                            </button>
-                                        )}
-                                    </div>
-                                );
-                            })}
+                            {pages.map((page, i) => (
+                                <div key={page.id} className="mb-4">
+                                    <p className={`prose-story ${i === 0 ? "drop-cap" : ""}`}>
+                                        <StoryText segments={page.segments} gloss={gloss} />
+                                    </p>
+                                </div>
+                            ))}
                             {pages.length === 0 && <p className="text-center text-ink-faint italic">these pages are still blank</p>}
                         </div>
                     </section>
@@ -149,78 +129,131 @@ function Story() {
     );
 }
 
-function Quests() {
+/** what the chapter in hand asks: a checklist, taken one thing at a time */
+function Goals() {
+    const story = useAtomValue(storyAtom);
     const book = useAtomValue(bookAtom);
-    const [quests, setQuests] = useAtom(questsAtom);
-    const setTurnReady = useSetAtom(chapterTurnReadyAtom);
-    /** the quest the reader has asked to give up, until they say they mean it */
-    const [letting, setLetting] = useState<string | null>(null);
-    const active = quests.filter((q) => q.status === "active");
-    const past = quests.filter((q) => q.status !== "active");
-
-    async function letGo(questId: string) {
-        setLetting(null);
-        if (!book) return;
-        const result = await abandonQuestAction(book.id, questId);
-        if (!result.ok) {
-            toast.error(result.error);
-            return;
-        }
-        setQuests(result.data.quests);
-        setTurnReady(result.data.chapterTurnReady);
-        toast("You let it go. The story will find another way.", { icon: "🍃", duration: 5000 });
-    }
-
-    const card = (quest: (typeof quests)[number]) => (
-        <article key={quest.id} className={`rounded-md border border-wood/30 bg-[#fffaf0]/60 px-4 py-3 ${quest.status !== "active" ? "opacity-70" : ""}`}>
-            <div className="flex items-baseline justify-between gap-2">
-                <h4 className="font-display text-xl leading-tight">{quest.title}</h4>
-                {quest.status === "completed" && <Chip tone="moss">done</Chip>}
-                {quest.status === "failed" && <Chip tone="ember">lost</Chip>}
-            </div>
-            {quest.giverName && <p className="text-sm text-ink-faint">from {quest.giverName}</p>}
-            <p className="text-ink-soft mt-1 leading-snug">{quest.description}</p>
-            <ul className="mt-2 grid gap-1">
-                {quest.objectives.map((o) => (
-                    <li key={o.id} className={`flex gap-2 leading-snug ${o.status === "completed" ? "text-ink-faint line-through" : o.status === "failed" ? "text-rose line-through" : o.waiting ? "text-ink-faint" : ""}`}>
-                        <span aria-hidden>{o.status === "completed" ? "✓" : KIND_ICON[o.kind] ?? "•"}</span>
-                        <span>
-                            {o.waiting && <span className="italic">then: </span>}
-                            {o.description}
-                            {o.targetCount > 1 && <span className="text-ink-faint"> ({o.progress}/{o.targetCount})</span>}
-                            {o.whereName && o.status === "active" && <span className="text-ink-faint"> — in {o.whereName}</span>}
-                            {o.kind === "learnWords" && o.status === "active" && (
-                                <span className="block text-sm text-ink-faint no-underline">
-                                    A word is learned the first time you get it right: in a battle, in the study hall, or by using it when you speak.
-                                </span>
-                            )}
-                        </span>
-                    </li>
-                ))}
-            </ul>
-            {quest.status === "active" && (
-                <p className="mt-2 text-right text-sm text-ink-faint">
-                    {letting === quest.id ? (
-                        <>
-                            Give this quest up for good?{" "}
-                            <button type="button" className="underline underline-offset-2 cursor-pointer text-rose hover:text-ink" onClick={() => void letGo(quest.id)}>yes, let it go</button>
-                            {" · "}
-                            <button type="button" className="underline underline-offset-2 cursor-pointer hover:text-ink" onClick={() => setLetting(null)}>no, keep it</button>
-                        </>
-                    ) : (
-                        <button type="button" className="underline underline-offset-2 cursor-pointer hover:text-ink" onClick={() => setLetting(quest.id)}>let this quest go</button>
-                    )}
-                </p>
-            )}
-        </article>
-    );
+    if (!story || !book) return null;
+    const inHand = story.goals.find((goal) => goal.status === "active");
+    const behind = story.goals.filter((goal) => goal.status !== "active");
 
     return (
+        <div className="max-w-2xl mx-auto grid gap-4">
+            <header className="text-center">
+                <span className="block font-hand text-lg text-ember-deep">chapter {story.chapter.index} of {story.chapter.of}</span>
+                <h3 className="font-display text-2xl">{story.chapter.title}</h3>
+            </header>
+
+            {inHand ? (
+                <article className="rounded-md border-2 border-gold/70 bg-gold/10 px-4 py-3">
+                    <p className="text-sm text-ink-faint">in hand</p>
+                    <h4 className="font-display text-xl leading-tight">
+                        <span className="mr-2" aria-hidden>{GOAL_ICON[inHand.kind] ?? "•"}</span>{inHand.title}
+                    </h4>
+                    <p className="text-ink-soft mt-1 leading-snug">
+                        {HOW[inHand.kind]}
+                        {inHand.whereName && <> It is in <span className="text-ink">{inHand.whereName}</span>: the gate to leave by is marked.</>}
+                    </p>
+                </article>
+            ) : (
+                <p className="text-center text-ink-soft italic py-2">
+                    {book.status === "completed" ? "The book is told. The world is still yours to wander."
+                        : story.due === "turn" ? "Everything this chapter asked is settled. Turn the page when you are ready."
+                        : story.due !== null ? "The storyteller is writing what comes next."
+                        : "Nothing is asked of you just now."}
+                </p>
+            )}
+
+            {story.ahead > 0 && (
+                <p className="text-center text-sm text-ink-faint">
+                    {story.ahead === 1 ? "One more thing" : `${story.ahead} more things`} will be asked before the chapter ends. One at a time.
+                </p>
+            )}
+
+            {behind.length > 0 && (
+                <section>
+                    <h4 className="font-hand text-xl text-ink-soft">behind you in this chapter</h4>
+                    <ul className="mt-1 grid gap-2">
+                        {[...behind].reverse().map((goal) => (
+                            <li key={goal.id} className="rounded-md border border-wood/30 bg-[#fffaf0]/60 px-4 py-2 flex gap-3">
+                                <span aria-hidden className="text-lg">{goal.status === "failed" ? "🍃" : "✓"}</span>
+                                <div className="leading-snug">
+                                    <span className={`font-display text-lg ${goal.status === "failed" ? "line-through decoration-rose/60 text-ink-soft" : ""}`}>{goal.title}</span>
+                                    {goal.status === "failed" && <Chip tone="ember" className="ml-2 align-middle">did not come off</Chip>}
+                                    {goal.outcome && <p className="text-ink-soft text-sm">{goal.outcome}</p>}
+                                    {goal.status === "failed" && <p className="font-hand text-base text-ink-soft">The story found another way.</p>}
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
+                </section>
+            )}
+
+            <section>
+                <h4 className="font-hand text-xl text-ink-soft">what you carry</h4>
+                {story.carrying.length === 0
+                    ? <p className="text-ink-faint italic">Nothing yet but your own two feet.</p>
+                    : (
+                        <ul className="mt-1 flex flex-wrap gap-2">
+                            {story.carrying.map((thing) => (
+                                <li key={thing} className="rounded-full border border-wood/40 bg-[#fffaf0]/70 px-3 py-0.5">{thing}</li>
+                            ))}
+                        </ul>
+                    )}
+            </section>
+        </div>
+    );
+}
+
+const HOW: Record<string, string> = {
+    visit: "Walk there: a column of light marks the place.",
+    talk: "Find them and hear what they have to say. They are marked in the world.",
+    persuade: "Find them and make your case. What they like will help you; what puts them off will not. They answer for themselves.",
+    fight: "Find it and stand your ground. If you are driven back, the story goes another way.",
+    examine: "Find it and look closely. It is marked in the world.",
+};
+
+/** everyone the hero has met: they can be written to from anywhere, at any time */
+function People() {
+    const people = useAtomValue(peopleAtom);
+    const mode = useAtomValue(modeAtom);
+    const game = useGame();
+
+    if (people.length === 0) {
+        return <p className="text-center text-ink-soft italic py-4">You have met nobody yet. Walk up to someone and say hello: after that, you can write to them from anywhere.</p>;
+    }
+    return (
         <div className="max-w-2xl mx-auto grid gap-3">
-            {active.length === 0 && <p className="text-center text-ink-soft italic py-4">Nothing is asked of you just now. The world is yours to wander.</p>}
-            {active.map(card)}
-            {past.length > 0 && <h3 className="font-hand text-xl text-ink-soft mt-4">behind you</h3>}
-            {past.map(card)}
+            <p className="text-ink-soft italic text-center">Everyone you have met. They remember you, and what has passed between you.</p>
+            {people.map((person) => (
+                <article key={person.id} className={`rounded-md border border-wood/30 bg-[#fffaf0]/60 px-4 py-3 ${person.gone ? "opacity-60" : ""}`}>
+                    <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                            <h4 className="font-display text-xl leading-tight">{person.name}</h4>
+                            <p className="text-sm text-ink-soft">
+                                {person.role} · <span className="italic">{person.mood}</span>
+                                {person.gone ? " · has left the story" : person.here ? " · here" : person.whereName ? ` · in ${person.whereName}` : ""}
+                            </p>
+                        </div>
+                        {!person.gone && (
+                            <button
+                                type="button"
+                                disabled={mode !== "explore"}
+                                onClick={() => void game.write(person.id)}
+                                className="shrink-0 font-display rounded-md border-b-4 px-3 py-1 bg-moss text-parchment border-moss-deep hover:bg-moss-deep cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Write to them
+                            </button>
+                        )}
+                    </div>
+                    {(person.likes.length > 0 || person.dislikes.length > 0) && (
+                        <div className="mt-2 grid gap-0.5 text-sm leading-snug">
+                            {person.likes.length > 0 && <p><span className="text-moss-deep font-semibold">warms to</span> <span className="text-ink-soft">{person.likes.join(" · ")}</span></p>}
+                            {person.dislikes.length > 0 && <p><span className="text-rose font-semibold">put off by</span> <span className="text-ink-soft">{person.dislikes.join(" · ")}</span></p>}
+                        </div>
+                    )}
+                </article>
+            ))}
         </div>
     );
 }

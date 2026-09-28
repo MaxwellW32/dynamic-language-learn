@@ -8,7 +8,8 @@ import type { Segment } from "@/game/segments";
 import type { StoredStage } from "@/game/challenges/types";
 import type { ActorLook, CreatureLook } from "@/game/looks";
 import type { DictSense } from "@/game/dictionary";
-import type { DialogueOption, LanguageNote, PassageChoice } from "@/game/payloads";
+import type { DialogueOption, LanguageNote } from "@/game/payloads";
+import type { GoalKind, GoalStatus } from "@/game/goals";
 
 const uuid = () => crypto.randomUUID();
 
@@ -28,11 +29,8 @@ export const memoryKindEnum = pgEnum("memory_kind", ["episode", "fact", "promise
 export const enemyTierEnum = pgEnum("enemy_tier", ["minion", "elite", "boss"]);
 export const enemyStatusEnum = pgEnum("enemy_status", ["alive", "defeated"]);
 export const encounterStatusEnum = pgEnum("encounter_status", ["active", "won", "retreated"]);
-export const questStatusEnum = pgEnum("quest_status", ["active", "completed", "failed"]);
-export const objectiveKindEnum = pgEnum("objective_kind", ["talkTo", "persuade", "defeat", "visit", "inspect", "learnWords"]);
-export const objectiveStatusEnum = pgEnum("objective_status", ["active", "completed", "failed"]);
-export const threadStatusEnum = pgEnum("thread_status", ["open", "resolved", "dropped"]);
 export const speakerEnum = pgEnum("speaker", ["player", "character"]);
+/** narration: what the storyteller told · discovery: what the hero found by looking. (The other two are no longer written.) */
 export const passageKindEnum = pgEnum("passage_kind", ["narration", "discovery", "event", "choice"]);
 export const topupStatusEnum = pgEnum("topup_status", ["pending", "paid", "failed", "refunded"]);
 
@@ -285,11 +283,25 @@ export const topups = pgTable("topups", {
     /** the processor's own id for the payment — unique, so a repeated webhook cannot credit twice */
     providerRef: text("providerRef"),
     status: topupStatusEnum("status").notNull().default("pending"),
+    /** the id we gave the gateway for this attempt; its answer must carry the same one */
+    transactionId: text("transactionId"),
+    /** what the card is charged, in the smallest unit of `chargedCurrency` — paidCents is always US cents */
+    chargedMinor: integer("chargedMinor"),
+    chargedCurrency: text("chargedCurrency"),
+    /** the page that sends the player to their bank, kept until it is served once */
+    handoff: text("handoff"),
+    handoffKey: text("handoffKey"),
+    /** why it was not paid, in words for the player */
+    message: text("message"),
+    cardBrand: text("cardBrand"),
+    cardLast4: text("cardLast4"),
+    authCode: text("authCode"),
     createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
     paidAt: timestamp("paidAt", { mode: "date" }),
 }, (t) => [
     index("topups_user_idx").on(t.userId),
     uniqueIndex("topups_provider_ref_idx").on(t.provider, t.providerRef).where(sql`${t.providerRef} is not null`),
+    uniqueIndex("topups_transaction_idx").on(t.transactionId).where(sql`${t.transactionId} is not null`),
 ]);
 
 /** speech is generated once and replayed forever, for everyone */
@@ -338,10 +350,14 @@ export const books = pgTable("books", {
      * only at chapter turns, which is what lets the provider cache it.
      */
     bible: text("bible").notNull().default(""),
-    /** the director's running note to the narrator about where the story should lean next */
-    directorNote: text("directorNote").notNull().default(""),
-    /** story weight accumulated since the director last looked; it runs when this crosses a threshold */
-    significance: integer("significance").notNull().default(0),
+    /** what the hero has come by and still carries: "a short sword from Brannoch's forge" */
+    belongings: json("belongings").$type<string[]>().notNull().default([]),
+    /**
+     * Set while the storyteller is writing for this book (pages, a chapter's
+     * goals, a road mended), so that two requests never write the same thing
+     * twice. A claim older than a few minutes was left by a request that died.
+     */
+    writingSince: timestamp("writingSince", { mode: "date" }),
     currentRegionId: text("currentRegionId").references((): AnyPgColumn => regions.id, { onDelete: "set null" }),
     x: real("x").notNull().default(0),
     z: real("z").notNull().default(0),
@@ -359,9 +375,8 @@ export const bookRelations = relations(books, ({ one, many }) => ({
     regions: many(regions),
     characters: many(characters),
     enemies: many(enemies),
-    quests: many(quests),
+    goals: many(goals),
     chapters: many(chapters),
-    threads: many(threads),
 }));
 
 /* ------------------------------------------------------------------ */
@@ -482,10 +497,19 @@ export const characters = pgTable("characters", {
     backstory: text("backstory").notNull().default(""),
     /** something they will not say until they trust the hero */
     secret: text("secret").notNull().default(""),
-    /** what they want right now; the director may change it as the story moves */
+    /** what they want right now; rewritten when a chapter begins, if the story has changed it */
     goal: text("goal").notNull().default(""),
     /** how they talk: rhythm, pet phrases, formality */
     speechStyle: text("speechStyle").notNull().default(""),
+    /** what warms them to someone, and what puts them off: the reader may see these, and use them */
+    likes: text("likes").array().notNull().default(sql`'{}'::text[]`),
+    dislikes: text("dislikes").array().notNull().default(sql`'{}'::text[]`),
+    /**
+     * False for someone the story has written but not yet brought in: they
+     * stand nowhere and can be spoken to by no one until the goal that
+     * introduces them comes due.
+     */
+    onstage: boolean("onstage").notNull().default(true),
     mood: text("mood").notNull().default("calm"),
     look: json("look").$type<ActorLook>().notNull(),
     voiceId: text("voiceId").notNull().default("alloy"),
@@ -601,70 +625,57 @@ export const encounterRelations = relations(encounters, ({ one }) => ({
 }));
 
 /* ------------------------------------------------------------------ */
-/* quests & story threads                                              */
+/* goals: what a chapter asks, one thing at a time                     */
 /* ------------------------------------------------------------------ */
 
-export const quests = pgTable("quests", {
+/** someone the story moves when a goal is done: to another place, or out of the book (null) */
+export type GoalMove = { characterId: string; toRegionId: string | null };
+
+/**
+ * A chapter's checklist. All of a chapter's goals are written at once, when
+ * the chapter begins; they are taken in order, one at a time (game/goals.ts).
+ * When one fails, those after it are dropped and written again.
+ */
+export const goals = pgTable("goals", {
     id: text("id").primaryKey().$defaultFn(uuid),
     bookId: text("bookId").notNull().references(() => books.id, { onDelete: "cascade" }),
-    title: text("title").notNull(),
-    description: text("description").notNull().default(""),
-    arcStage: arcStageEnum("arcStage").notNull().default("introduction"),
-    giverCharacterId: text("giverCharacterId").references(() => characters.id, { onDelete: "set null" }),
-    status: questStatusEnum("status").notNull().default("active"),
+    chapterId: text("chapterId").notNull().references((): AnyPgColumn => chapters.id, { onDelete: "cascade" }),
     sortIndex: integer("sortIndex").notNull().default(0),
-    createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
-}, (t) => [
-    index("quests_bookId_idx").on(t.bookId),
-]);
-
-export const questRelations = relations(quests, ({ one, many }) => ({
-    book: one(books, { fields: [quests.bookId], references: [books.id] }),
-    objectives: many(questObjectives),
-}));
-
-export const questObjectives = pgTable("quest_objectives", {
-    id: text("id").primaryKey().$defaultFn(uuid),
-    questId: text("questId").notNull().references(() => quests.id, { onDelete: "cascade" }),
-    description: text("description").notNull(),
-    kind: objectiveKindEnum("kind").notNull(),
+    kind: text("kind").$type<GoalKind>().notNull(),
+    /** what the checklist says; for a tell, a working title the reader never sees */
+    title: text("title").notNull(),
+    /** for whoever writes or speaks when the goal comes due: what to tell, what the talk is for, what would sway them */
+    brief: text("brief").notNull().default(""),
+    status: text("status").$type<GoalStatus>().notNull().default("waiting"),
     targetCharacterId: text("targetCharacterId").references(() => characters.id, { onDelete: "set null" }),
     targetEnemyId: text("targetEnemyId").references(() => enemies.id, { onDelete: "set null" }),
     targetRegionId: text("targetRegionId").references(() => regions.id, { onDelete: "set null" }),
+    targetBuildingId: text("targetBuildingId").references(() => buildings.id, { onDelete: "set null" }),
     targetLandmarkId: text("targetLandmarkId").references(() => landmarks.id, { onDelete: "set null" }),
-    targetCount: integer("targetCount").notNull().default(1),
-    progress: integer("progress").notNull().default(0),
-    status: objectiveStatusEnum("status").notNull().default("active"),
-    sortIndex: integer("sortIndex").notNull().default(0),
-}, (t) => [
-    index("questObjectives_questId_idx").on(t.questId),
-]);
-
-export const questObjectiveRelations = relations(questObjectives, ({ one }) => ({
-    quest: one(quests, { fields: [questObjectives.questId], references: [quests.id] }),
-}));
-
-/**
- * What the story is still holding open: mysteries, promises, feuds, bonds.
- * The director reads and rewrites these — they are how a choice made in
- * chapter one can still matter in chapter four.
- */
-export const threads = pgTable("threads", {
-    id: text("id").primaryKey().$defaultFn(uuid),
-    bookId: text("bookId").notNull().references(() => books.id, { onDelete: "cascade" }),
-    title: text("title").notNull(),
-    kind: text("kind").notNull().default("mystery"),
-    summary: text("summary").notNull(),
-    status: threadStatusEnum("status").notNull().default("open"),
-    importance: smallint("importance").notNull().default(5),
+    /** what the hero has in hand if it goes well */
+    gains: text("gains"),
+    /** people who step into the story when this goal comes due (character ids) */
+    enters: json("enters").$type<string[]>().notNull().default([]),
+    moves: json("moves").$type<GoalMove[]>().notNull().default([]),
+    /** persuade: where the person stands, -5 … 5, as they last said */
+    lean: integer("lean").notNull().default(0),
+    /** how it ended, in one line: what every later page and goal is told */
+    outcome: text("outcome").notNull().default(""),
+    /** tell: the page that was written */
+    passageId: text("passageId"),
+    /** failed: the road ahead has been written again */
+    mended: boolean("mended").notNull().default(false),
+    activatedAt: timestamp("activatedAt", { mode: "date" }),
+    settledAt: timestamp("settledAt", { mode: "date" }),
     createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
-    updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [
-    index("threads_book_status_idx").on(t.bookId, t.status),
+    index("goals_chapter_idx").on(t.chapterId, t.sortIndex),
+    index("goals_book_status_idx").on(t.bookId, t.status),
 ]);
 
-export const threadRelations = relations(threads, ({ one }) => ({
-    book: one(books, { fields: [threads.bookId], references: [books.id] }),
+export const goalRelations = relations(goals, ({ one }) => ({
+    book: one(books, { fields: [goals.bookId], references: [books.id] }),
+    chapter: one(chapters, { fields: [goals.chapterId], references: [chapters.id] }),
 }));
 
 /* ------------------------------------------------------------------ */
@@ -715,11 +726,25 @@ export const messageRelations = relations(messages, ({ one }) => ({
 /* the book itself: chapters & passages                                */
 /* ------------------------------------------------------------------ */
 
+/**
+ * The whole book is outlined when it is made: every chapter from the first to
+ * the last has its row, its title and its description from the start. Where a
+ * chapter ends is fixed; how the hero gets there is not.
+ *
+ * ahead: not reached · open: the one being played · closed: behind the hero.
+ */
+export type ChapterStatus = "ahead" | "open" | "closed";
+
 export const chapters = pgTable("chapters", {
     id: text("id").primaryKey().$defaultFn(uuid),
     bookId: text("bookId").notNull().references(() => books.id, { onDelete: "cascade" }),
     index: integer("index").notNull(),
     title: text("title").notNull(),
+    /** what the chapter is for and where it must end: written for the storyteller, never shown to the reader */
+    description: text("description").notNull().default(""),
+    stage: arcStageEnum("stage").notNull().default("introduction"),
+    status: text("status").$type<ChapterStatus>().notNull().default("ahead"),
+    /** what happened in it, written when it closes */
     summary: text("summary").notNull().default(""),
     createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
 }, (t) => [
@@ -729,6 +754,7 @@ export const chapters = pgTable("chapters", {
 export const chapterRelations = relations(chapters, ({ one, many }) => ({
     book: one(books, { fields: [chapters.bookId], references: [books.id] }),
     passages: many(passages),
+    goals: many(goals),
 }));
 
 export const passages = pgTable("passages", {
@@ -737,10 +763,6 @@ export const passages = pgTable("passages", {
     chapterId: text("chapterId").notNull().references(() => chapters.id, { onDelete: "cascade" }),
     kind: passageKindEnum("kind").notNull().default("narration"),
     segments: json("segments").$type<Segment[]>().notNull().default([]),
-    /** a fork in the story: what the reader may do next */
-    choices: json("choices").$type<PassageChoice[]>(),
-    /** which choice they took; null while the fork is still open */
-    chosenKey: text("chosenKey"),
     regionId: text("regionId").references(() => regions.id, { onDelete: "set null" }),
     createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
 }, (t) => [
@@ -870,9 +892,7 @@ export type Memory = typeof memories.$inferSelect;
 export type Relationship = typeof relationships.$inferSelect;
 export type Enemy = typeof enemies.$inferSelect;
 export type Encounter = typeof encounters.$inferSelect;
-export type Quest = typeof quests.$inferSelect;
-export type QuestObjective = typeof questObjectives.$inferSelect;
-export type Thread = typeof threads.$inferSelect;
+export type Goal = typeof goals.$inferSelect;
 export type Conversation = typeof conversations.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type Chapter = typeof chapters.$inferSelect;

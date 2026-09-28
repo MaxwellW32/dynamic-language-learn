@@ -24,7 +24,7 @@ export function Cover({ scene, withGoogle, withEmail }: {
     const [shown, setShown] = useState(false);
 
     const events = useMemo<EngineEvents>(() => ({
-        onNearest: () => { }, onAct: () => { }, onContact: () => { }, onWord: () => { }, onStick: () => { },
+        onNearest: () => { }, onAct: () => { }, onContact: () => { }, onReach: () => { }, onWord: () => { }, onStick: () => { },
     }), []);
 
     const engineRef = useRef<WorldEngine | null>(null);

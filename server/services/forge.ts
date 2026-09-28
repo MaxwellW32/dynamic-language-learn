@@ -3,13 +3,13 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
     books, buildings, chapters, characters, conversations, enemies, events, gates, landmarks,
-    passages, quests, regions, relationships, threads,
+    regions, relationships,
     type Book, type BookBrief, type Region,
 } from "@/db/schema";
 import type { ChallengeType } from "@/game/challenges/types";
 import { isLangCode, languageOf, type LangCode } from "@/game/languages";
 import {
-    isBiome, isTimeOfDay, isWeather, LANDMARK_KIND_LIST, sanitizeCreature, sanitizeLook, sanitizeVoice,
+    isBiome, isTimeOfDay, isWeather, LANDMARK_KIND_LIST, sanitizeCreature, sanitizeLook,
     type ActorLook, type LandmarkKind,
 } from "@/game/looks";
 import {
@@ -17,16 +17,12 @@ import {
 } from "@/game/worldgen/layout";
 import { hash2, hashString } from "@/game/worldgen/rng";
 import type { AiContext } from "../ai/client";
-import { writeOpening, writeSeed, writeWorld, type FillBrief } from "../ai/prompts/forge";
-import { bibleOf } from "../ai/prompts/rulebook";
+import { writeSeed, writeWorld, type FillBrief } from "../ai/prompts/forge";
 import type { RegionSketch, WorldFill } from "../ai/schemas";
-import { lineToSegments, offerWords, resolveSegments } from "../ai/segments";
-import { getImmersion, getLearner, planWords, recordExposure } from "./learning";
-import { persistQuests, standingQuest } from "./quests";
-import { worldKeys } from "./scene";
+import { personValues } from "./cast";
+import { getLearner } from "./learning";
 import { canSpend } from "./wallet";
 import { labelsForKinds } from "./worldWords";
-import { plannedIdsIn } from "@/game/segments";
 import { sparksFor } from "@/game/sparks";
 
 /** what each tier of creature may throw at the hero */
@@ -43,21 +39,21 @@ const POPULATION: Record<RegionKind, { people: number; creatures: number }> = {
     depths: { people: 1, creatures: 5 },
 };
 
-async function note(bookId: string, text: string): Promise<void> {
+/** what the waiting reader is told the storyteller is doing */
+export async function forgeNote(bookId: string, text: string): Promise<void> {
     await db.update(books).set({ forgeNote: text }).where(eq(books.id, bookId));
 }
 
 /** wipe whatever a failed forge left behind, so a retry starts clean */
 async function clearWorld(bookId: string): Promise<void> {
     await db.update(books).set({ currentRegionId: null }).where(eq(books.id, bookId));
-    // buildings, landmarks, gates, characters and their memories, enemies and encounters all hang off regions and the book
-    await db.delete(quests).where(eq(quests.bookId, bookId));
+    // buildings, landmarks, gates, characters and their memories, enemies and encounters all hang off regions and the book;
+    // goals and pages hang off chapters
     await db.delete(conversations).where(eq(conversations.bookId, bookId));
     await db.delete(characters).where(eq(characters.bookId, bookId));
     await db.delete(enemies).where(eq(enemies.bookId, bookId));
     await db.delete(chapters).where(eq(chapters.bookId, bookId));
     await db.delete(events).where(eq(events.bookId, bookId));
-    await db.delete(threads).where(eq(threads.bookId, bookId));
     await db.delete(regions).where(eq(regions.bookId, bookId));
 }
 
@@ -246,23 +242,10 @@ async function settlePeople(book: Book, lang: LangCode, slotted: Slotted, fill: 
     await Promise.all(slotted.people.map(async (spot, i) => {
         const made = cast.get(spot.key);
         if (!made) return;
-        const seed = hashString(`${book.id}:${spot.key}:${made.name}`);
-        const barks = (await Promise.all(made.barks.slice(0, 3).map((bark) =>
-            lineToSegments(lang, bark.target, bark.translation, true)))).filter((segments) => segments.length > 0);
         const [row] = await db.insert(characters).values({
             bookId: book.id, regionId: spot.region.id,
             x: spot.x, z: spot.z, facing: spot.rot,
-            name: made.name.trim().slice(0, 40),
-            role: made.role.trim().slice(0, 60),
-            personality: made.personality.trim().slice(0, 300),
-            appearance: made.appearance.trim().slice(0, 300),
-            backstory: made.backstory.trim().slice(0, 600),
-            secret: made.secret.trim().slice(0, 300),
-            goal: made.goal.trim().slice(0, 200),
-            speechStyle: made.speechStyle.trim().slice(0, 200),
-            look: sanitizeLook(made.look, seed),
-            voiceId: sanitizeVoice(made.voice, seed),
-            barks,
+            ...(await personValues(book.id, lang, made, spot.key)),
             createdAt: new Date(base + i),
         }).returning();
         await db.insert(relationships).values({ characterId: row.id });
@@ -294,133 +277,95 @@ async function looseCreatures(book: Book, slotted: Slotted, fill: WorldFill): Pr
 /* the forge                                                           */
 /* ------------------------------------------------------------------ */
 
-/**
- * Make the world of a new book. Geometry comes from the seeded layouts; the
- * model names and fills. Three story-tier calls: the idea, the inhabitants,
- * the opening.
- */
-export async function forgeWorld(ctx: AiContext, book: Book): Promise<void> {
-    // claim the run — a second concurrent call gets nothing back and leaves
+/** claim the making of a book: a second caller gets false, and leaves */
+export async function claimForge(book: Pick<Book, "id">): Promise<boolean> {
     const claimed = await db.update(books)
         .set({ forgeNote: "Summoning the storyteller…" })
         .where(and(eq(books.id, book.id), eq(books.status, "forging"), inArray(books.forgeNote, ["", "failed"])))
         .returning();
-    if (claimed.length === 0) return;
+    return claimed.length > 0;
+}
 
+export async function failForge(bookId: string): Promise<void> {
+    await forgeNote(bookId, "failed");
+}
+
+/**
+ * Make the world of a new book: its idea, its three places, and who and what
+ * is in them. Geometry comes from the seeded layouts; the model names and
+ * fills. Three story-tier calls, two of them side by side.
+ *
+ * The book is left "forging": its story has yet to be outlined and begun
+ * (`beginStory` in server/services/story.ts).
+ */
+export async function buildWorld(ctx: AiContext, book: Book): Promise<{ book: Book; home: Region }> {
     const lang: LangCode = isLangCode(book.targetLanguage) ? book.targetLanguage : "es";
-    try {
-        await clearWorld(book.id);
-        const learner = await getLearner(book.userId, lang);
+    await clearWorld(book.id);
+    const learner = await getLearner(book.userId, lang);
 
-        /* 1 — the idea */
-        const seed = await writeSeed(ctx, {
-            playerName: book.playerName,
-            targetLanguage: lang,
-            brief: book.brief,
-            startingLevel: learner.startingLevel,
-            sparks: sparksFor(book.worldSeed),
-        });
-        const facts = seed.facts.map((fact) => `- ${fact.trim()}`).join("\n");
-        const bible = `What is true of this world:\n${facts}\n\nWhat the book is really about (never state it outright): ${seed.heart.trim()}`;
-        await db.update(books).set({
-            title: seed.title.trim().slice(0, 80),
-            premise: seed.premise.trim(),
-            tone: seed.tone.trim().slice(0, 100),
-            bible,
-            forgeNote: "Drawing the maps…",
-        }).where(eq(books.id, book.id));
-        const named: Book = { ...book, title: seed.title.trim(), premise: seed.premise.trim(), tone: seed.tone.trim(), bible };
+    /* 1 — the idea */
+    const seed = await writeSeed(ctx, {
+        playerName: book.playerName,
+        targetLanguage: lang,
+        brief: book.brief,
+        startingLevel: learner.startingLevel,
+        sparks: sparksFor(book.worldSeed),
+    });
+    const facts = seed.facts.map((fact) => `- ${fact.trim()}`).join("\n");
+    const bible = `What is true of this world:\n${facts}\n\nWhat the book is really about (never state it outright): ${seed.heart.trim()}`;
+    await db.update(books).set({
+        title: seed.title.trim().slice(0, 80),
+        premise: seed.premise.trim(),
+        tone: seed.tone.trim().slice(0, 100),
+        bible,
+        belongings: [],
+        forgeNote: "Drawing the maps…",
+    }).where(eq(books.id, book.id));
+    const named: Book = { ...book, title: seed.title.trim(), premise: seed.premise.trim(), tone: seed.tone.trim(), bible, belongings: [] };
 
-        /* 2 — three places, joined west to east */
-        const [home, wilds, depths] = await Promise.all([
-            insertRegion(named, "r1", "settlement", seed.home, 0),
-            insertRegion(named, "r2", "wilds", seed.wilds, 1),
-            insertRegion(named, "r3", "depths", seed.depths, 2),
-        ]);
-        const open: Record<string, GateSide[]> = { r1: ["e"], r2: ["e", "w"], r3: ["w"] };
-        await Promise.all([
-            joinRegions(home, "e", wilds, open.r1, open.r2),
-            joinRegions(wilds, "e", depths, open.r2, open.r3),
-        ]);
+    /* 2 — three places, joined west to east */
+    const [home, wilds, depths] = await Promise.all([
+        insertRegion(named, "r1", "settlement", seed.home, 0),
+        insertRegion(named, "r2", "wilds", seed.wilds, 1),
+        insertRegion(named, "r3", "depths", seed.depths, 2),
+    ]);
+    const open: Record<string, GateSide[]> = { r1: ["e"], r2: ["e", "w"], r3: ["w"] };
+    await Promise.all([
+        joinRegions(home, "e", wilds, open.r1, open.r2),
+        joinRegions(wilds, "e", depths, open.r2, open.r3),
+    ]);
 
-        const slotted: Slotted = { people: [], creatures: [], things: [], houses: [] };
-        for (const region of [home, wilds, depths]) {
-            slot(region, generateLayout({ seed: region.seed, kind: region.kind, biome: region.biome as never, gates: open[region.key] }), slotted);
-        }
-
-        /* 3 — who and what is there */
-        await note(book.id, "Waking the villagers…");
-        const fill = await writeWorld(ctx, {
-            seed,
-            playerName: book.playerName,
-            targetLanguage: lang,
-            places: [home, wilds, depths].map((r) => `- ${r.key}: ${r.name} — ${r.kind}, ${r.biome}, ${r.timeOfDay}. ${r.description}`).join("\n"),
-            brief: fillBrief(slotted),
-        });
-        await populate(named, lang, slotted, fill, 0);
-
-        /* 4 — the first page and the first quests */
-        await note(book.id, "Writing the first page…");
-        const keys = await worldKeys(named);
-        const allRegions = [home, wilds, depths];
-        const immersion = await getImmersion(book.userId, lang);
-        const offer = offerWords(await planWords(book.userId, lang, {
-            introduce: 3, review: 0, scene: 3, sceneKeys: home.themeWords, embed: true,
-        }));
-        const opening = await writeOpening(ctx, {
-            bible: bibleOf(named, allRegions, keys.cast),
-            heart: seed.heart,
-            cast: keys.peopleBrief,
-            creatures: keys.creaturesBrief,
-            places: keys.placesBrief,
-            landmarks: keys.thingsBrief,
-            startPlace: home.name,
-            offer,
-            immersion,
-            cacheKey: book.id,
-        });
-
-        const [[chapter], segments] = await Promise.all([
-            db.insert(chapters).values({
-                bookId: book.id, index: 1, title: opening.chapterTitle.trim().slice(0, 80),
-            }).returning(),
-            resolveSegments(lang, opening.passage, offer),
-        ]);
-        await Promise.all([
-            db.insert(passages).values({
-                bookId: book.id, chapterId: chapter.id, kind: "narration", segments, regionId: home.id,
-            }),
-            persistQuests(book.id, "introduction", opening.quests, keys, home.id).then(async ({ created }) => {
-                // a first chapter with nothing to do could never end
-                if (created.length === 0) await persistQuests(book.id, "introduction", [standingQuest(opening.chapterTitle.trim().slice(0, 80))], keys);
-            }),
-            opening.threads.length > 0
-                ? db.insert(threads).values(opening.threads.slice(0, 5).map((thread) => ({
-                    bookId: book.id,
-                    title: thread.title.trim().slice(0, 80),
-                    kind: thread.kind,
-                    summary: thread.summary.trim().slice(0, 400),
-                    importance: thread.importance,
-                })))
-                : Promise.resolve(),
-            db.insert(events).values({
-                bookId: book.id, kind: "arrival", importance: 4, regionId: home.id,
-                summary: `${book.playerName} arrived in ${home.name}, and the story began.`,
-            }),
-            recordExposure(book.userId, lang, plannedIdsIn(segments)),
-        ]);
-
-        const spawn = generateLayout({ seed: home.seed, kind: home.kind, biome: home.biome as never, gates: open.r1 }).spawn;
-        await db.update(regions).set({ visited: true }).where(eq(regions.id, home.id));
-        await db.update(books).set({
-            status: "active", forgeNote: "",
-            currentRegionId: home.id, x: spawn.x, z: spawn.z, facing: spawn.rot,
-        }).where(eq(books.id, book.id));
-    } catch (error) {
-        console.error("[forge] failed", error);
-        await note(book.id, "failed");
-        throw error;
+    const slotted: Slotted = { people: [], creatures: [], things: [], houses: [] };
+    for (const region of [home, wilds, depths]) {
+        slot(region, generateLayout({ seed: region.seed, kind: region.kind, biome: region.biome as never, gates: open[region.key] }), slotted);
     }
+
+    /* 3 — who and what is there */
+    await forgeNote(book.id, "Waking the villagers…");
+    const fill = await writeWorld(ctx, {
+        seed,
+        playerName: book.playerName,
+        targetLanguage: lang,
+        places: [home, wilds, depths].map((r) => `- ${r.key}: ${r.name} — ${r.kind}, ${r.biome}, ${r.timeOfDay}. ${r.description}`).join("\n"),
+        brief: fillBrief(slotted),
+    });
+    await populate(named, lang, slotted, fill, 0);
+
+    // the hero stands at the door of the story before it is written: whoever plans it must know where they are
+    const spawn = generateLayout({ seed: home.seed, kind: home.kind, biome: home.biome as never, gates: open.r1 }).spawn;
+    await db.update(regions).set({ visited: true }).where(eq(regions.id, home.id));
+    await db.update(books).set({
+        currentRegionId: home.id, x: spawn.x, z: spawn.z, facing: spawn.rot,
+    }).where(eq(books.id, book.id));
+    await db.insert(events).values({
+        bookId: book.id, kind: "arrival", importance: 4, regionId: home.id,
+        summary: `${book.playerName} arrived in ${home.name}, and the story began.`,
+    });
+
+    return {
+        book: { ...named, currentRegionId: home.id, x: spawn.x, z: spawn.z, facing: spawn.rot },
+        home: { ...home, visited: true },
+    };
 }
 
 /* ------------------------------------------------------------------ */
@@ -445,8 +390,8 @@ export async function freeSide(bookId: string): Promise<{ region: Region; side: 
 }
 
 /**
- * Add a place to a book already under way: a chapter turned and the story
- * needed somewhere new. One story-tier call fills it.
+ * Add a place to a book already under way: a chapter began and the story
+ * needed somewhere new. Two story-tier calls, side by side, fill it.
  */
 export async function forgeRegion(ctx: AiContext, book: Book, sketch: RegionSketch & { kind: RegionKind }): Promise<Region | null> {
     const room = await freeSide(book.id);

@@ -1,16 +1,19 @@
 /**
- * Plays a book as the test player until its chapter turns, with no browser:
- * every open objective is done the way a player would do it (walk there, talk,
- * examine, fight), forks are taken, one long conversation is held so that the
- * scribe has something to summarise, and then the page is turned. It makes real
- * model calls (twenty to forty cents) and prints what each step produced.
+ * Plays a book as the test player, with no browser, the way the book is meant
+ * to be played: one goal at a time, in order. It walks where a goal sends it,
+ * talks to whom a goal names (and asks for their answer), fights what a goal
+ * points at, reads what the storyteller tells, and turns the page when a
+ * chapter is done. It makes real model calls (thirty to sixty cents) and
+ * prints what each step produced.
  *
- *   npx tsx --conditions=react-server scripts/checkGrowth.ts [lang] [--book=<id>] [--chapters=2] [--grow] [--keep]
+ *   npx tsx --conditions=react-server scripts/checkGrowth.ts [lang] [--book=<id>] [--chapters=2] [--fail=persuade|fight|talk] [--keep]
  *
- * --grow adds a region the way a chapter turn may, and walks the hero into it.
+ * --fail makes the hero fail the first goal of that kind, on purpose: the road
+ *        must then be written again, and the chapter must still end.
+ * --book plays a book that already exists, from wherever it stands.
  *
- * This is the check for the parts of the story that only happen later: quest
- * beats, the director, chapter turns, new regions, summaries.
+ * It ends with a list of what it found wrong. Run it after touching goals, the
+ * planner, the storyteller, conversations or the forge.
  */
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local", quiet: true });
@@ -18,31 +21,34 @@ dotenv.config({ path: ".env.local", quiet: true });
 import { and, asc, eq, gte, inArray } from "drizzle-orm";
 import { db } from "../db";
 import {
-    aiUsage, books, buildings, chapters, characters, conversations, encounters, enemies, gates, landmarks, memories,
-    questObjectives, quests, regions, threads, users,
-    type Book, type QuestObjective,
+    aiUsage, books, buildings, chapters, characters, conversations, encounters, enemies, gates, goals, landmarks, memories,
+    regions, users,
+    type Book, type Goal,
 } from "../db/schema";
 import type { StoredStage, Submission } from "../game/challenges/types";
+import { checklist, whatIsDue } from "../game/goals";
 import { isLangCode, type LangCode } from "../game/languages";
 import { DEFAULT_LOOK } from "../game/looks";
-import type { PassageView, QuestUpdate } from "../game/payloads";
+import type { GoalSettled, PassageView, StoryState } from "../game/payloads";
 import { segmentsToPlainText, type Segment } from "../game/segments";
 import { distToTrail, generateLayout, type GateSide } from "../game/worldgen/layout";
 import { testAccounts } from "../lib/testMode";
 import { formatMoney } from "../server/ai/pricing";
-import { turnChapter } from "../server/services/chapters";
-import { openDialogue, say } from "../server/services/dialogue";
+import { getPeople } from "../server/services/cast";
+import { askForAnswer, openDialogue, say } from "../server/services/dialogue";
 import { startEncounter, submitAnswer } from "../server/services/encounters";
-import { createBook, forgeRegion, forgeWorld } from "../server/services/forge";
-import { choose, examine, handleArrival } from "../server/services/narration";
-import { isChapterTurnReady } from "../server/services/quests";
-import { syncPosition, travel } from "../server/services/scene";
+import { createBook } from "../server/services/forge";
+import { chaptersOf, goalsOf, storySoFar, storyState } from "../server/services/goals";
+import { examine } from "../server/services/narration";
+import { firstGateToward, getScene, syncPosition, travel } from "../server/services/scene";
+import { advance, arrive, forgeBook, reach, turnChapter } from "../server/services/story";
 
 const args = process.argv.slice(2);
 const lang = (args.find((a) => isLangCode(a)) ?? "it") as LangCode;
 const keep = args.includes("--keep");
 const reuse = args.find((a) => a.startsWith("--book="))?.split("=")[1];
 const chaptersToTurn = Number(args.find((a) => a.startsWith("--chapters="))?.split("=")[1] ?? 1);
+const failAt = args.find((a) => a.startsWith("--fail="))?.split("=")[1] ?? null;
 
 const problems: string[] = [];
 const problem = (text: string) => {
@@ -62,8 +68,15 @@ function inspect(what: string, segments: Segment[]): void {
     for (const s of segments) if (s.t === "tl" && s.tr.trim().length === 0) problem(`${what}: «${s.v}» has no translation`);
 }
 
-function solve(stage: StoredStage): Submission {
+function solve(stage: StoredStage, rightly: boolean): Submission {
     const a = stage.answer;
+    if (!rightly) {
+        if (a.kind === "choice") return { kind: "choice", value: "not this, surely" };
+        if (a.kind === "spelling") return { kind: "spelling", value: "zzzz" };
+        if (a.kind === "matching") return { kind: "matching", pairs: [] };
+        if (a.kind === "speak") return { kind: "speak", heard: "zzzz" };
+        return { kind: "order", order: [] };
+    }
     if (a.kind === "choice") return { kind: "choice", value: a.value };
     if (a.kind === "spelling") return { kind: "spelling", value: a.display };
     if (a.kind === "matching") return { kind: "matching", pairs: a.pairs.map((p) => ({ left: p.left, right: p.right })) };
@@ -76,6 +89,22 @@ function solve(stage: StoredStage): Submission {
     });
     return { kind: "order", order };
 }
+
+const WINNING = [
+    "I know this is a lot to ask. Tell me what worries you, and I will listen before I ask again.",
+    "You have my word: I will see this through with you, and I will not leave you to face it alone.",
+    "I would not ask if it did not matter. What would you need from me to say yes?",
+    "Then let us do it your way, at your pace. I will do exactly as you ask.",
+];
+const LOSING = [
+    "Just hand it over. I have no time for your stories.",
+    "You are a fool, and nobody here would miss your work. Give me what I want.",
+    "I will take it whether you like it or not. Do not make me ask again.",
+];
+const ASKING = [
+    "Hello! I was told to come and find you. What should I know?",
+    "Thank you. Is there anything else I ought to hear before I go?",
+];
 
 async function main() {
     const player = await db.query.users.findFirst({ where: eq(users.email, testAccounts.player.email) });
@@ -92,290 +121,337 @@ async function main() {
         });
         const fresh = (await db.query.books.findFirst({ where: eq(books.id, bookId) }))!;
         const began = Date.now();
-        await forgeWorld({ userId, bookId }, fresh);
+        await forgeBook({ userId, bookId }, fresh);
         console.log(`forged in ${((Date.now() - began) / 1000).toFixed(0)}s`);
     }
     const ctx = { userId, bookId };
     const load = async (): Promise<Book> => (await db.query.books.findFirst({ where: eq(books.id, bookId) }))!;
     let book = await load();
+    if (book.userId !== userId) throw new Error("That book is not the test player's.");
     console.log(`\n"${book.title}" (${book.targetLanguage}) — ${book.arcStage}\n${book.premise}`);
 
     /* ---------------------------------------------------------------- */
-    /* what a step may hand back                                         */
+    /* looking at what was written                                       */
     /* ---------------------------------------------------------------- */
 
-    async function after(what: string, result: { passage?: PassageView | null; questUpdates?: QuestUpdate[] }): Promise<void> {
-        for (const update of result.questUpdates ?? []) {
-            console.log(`   quest: "${update.questTitle}" ${update.isNew ? "GIVEN" : update.failed ? "LOST" : update.questCompleted ? "COMPLETED" : "moved"}${update.objectiveDescription ? ` — ${update.objectiveDescription}` : ""}`);
+    async function showOutline(): Promise<void> {
+        const all = await chaptersOf(bookId!);
+        console.log("\nthe outline:");
+        for (const chapter of all) {
+            console.log(`  ${chapter.index}. [${chapter.status}] "${chapter.title}" (${chapter.stage})\n       ${chapter.description || "(no description)"}`);
         }
-        let page = result.passage ?? null;
-        // a fork is taken as soon as it is offered, and what follows may fork again
-        for (let depth = 0; page && depth < 3; depth++) {
-            console.log(`   page [${page.kind}]: ${show(page.segments)}`);
-            inspect(`${what} page`, page.segments);
-            if (!page.choices || page.chosenKey) break;
-            const taken = page.choices[depth % page.choices.length];
-            console.log(`   fork: ${page.choices.map((c) => `(${c.tone}) ${segmentsToPlainText(c.label)}`).join(" | ")}  → taking "${segmentsToPlainText(taken.label)}"`);
-            book = await load();
-            const outcome = await choose(ctx, book, page.id, taken.key);
-            for (const update of outcome.questUpdates) console.log(`   quest: "${update.questTitle}" moved`);
-            page = outcome.passage;
-            if (!page) problem(`${what}: the fork wrote nothing`);
+        const outlined = all.filter((chapter) => chapter.description.trim().length > 0);
+        if (outlined.length > 0) {
+            if (!all.some((chapter) => chapter.status === "open")) problem("no chapter is open");
+            if (all[all.length - 1].stage !== "resolution") problem("the last chapter is not the resolution");
+            if (!all.some((chapter) => chapter.stage === "climax") && book.arcStage !== "falling" && book.arcStage !== "resolution") problem("the outline has no climax");
+            for (const chapter of outlined) if (chapter.description.length < 60) problem(`chapter ${chapter.index} is described in ${chapter.description.length} characters`);
         }
     }
 
-    /** walk through gates until the hero stands in the region, reading the arrivals on the way */
+    async function showGoals(chapterId: string, heading: string): Promise<Goal[]> {
+        const list = await goalsOf(chapterId);
+        const names = new Map<string, string>([
+            ...(await db.query.characters.findMany({ where: eq(characters.bookId, bookId!) })).map((c) => [c.id, `${c.name}${c.onstage ? "" : " (off stage)"}`] as const),
+            ...(await db.query.enemies.findMany({ where: eq(enemies.bookId, bookId!) })).map((e) => [e.id, `${e.name} (${e.tier})`] as const),
+            ...(await db.query.regions.findMany({ where: eq(regions.bookId, bookId!) })).map((r) => [r.id, r.name] as const),
+        ]);
+        for (const thing of await db.query.landmarks.findMany()) names.set(thing.id, thing.name);
+        for (const house of await db.query.buildings.findMany()) names.set(house.id, house.name);
+        console.log(`\n${heading}`);
+        for (const goal of list) {
+            const target = goal.targetCharacterId ?? goal.targetEnemyId ?? goal.targetBuildingId ?? goal.targetLandmarkId ?? goal.targetRegionId;
+            console.log(`  ${String(goal.sortIndex).padStart(2)}. [${goal.status.padEnd(7)}] ${goal.kind.padEnd(8)} ${goal.title}${target ? ` → ${names.get(target) ?? "?"}` : ""}${goal.gains ? `  (gains: ${goal.gains})` : ""}${goal.enters.length ? `  (enters: ${goal.enters.map((id) => names.get(id)).join(", ")})` : ""}${goal.moves.length ? `  (moves: ${goal.moves.map((m) => `${names.get(m.characterId)} to ${m.toRegionId ? names.get(m.toRegionId) : "gone"}`).join(", ")})` : ""}`);
+            console.log(`        ${goal.brief}`);
+        }
+        const live = list.filter((goal) => goal.status !== "dropped");
+        if (live.length < 3) problem(`the chapter has ${live.length} goals`);
+        const tells = live.filter((goal) => goal.kind === "tell").length;
+        if (tells === 0) problem("the chapter tells nothing");
+        if (tells === live.length) problem("the chapter asks nothing of the hero");
+        if (live.filter((goal) => goal.status === "active").length > 1) problem("more than one goal is in hand");
+        return list;
+    }
+
+    function readPages(what: string, pages: PassageView[]): void {
+        for (const page of pages) {
+            console.log(`   page [${page.kind}]: ${show(page.segments)}`);
+            inspect(`${what} page`, page.segments);
+            const words = segmentsToPlainText(page.segments).split(/\s+/).length;
+            if (words > 170) problem(`${what} page runs to ${words} words`);
+        }
+    }
+
+    function note(settled: GoalSettled | null): void {
+        if (settled) console.log(`   ${settled.status === "done" ? "✓ DONE" : "✗ FAILED"}: ${settled.title} — ${settled.outcome}`);
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* getting about                                                     */
+    /* ---------------------------------------------------------------- */
+
+    /** walk through gates until the hero stands in the region */
     async function goTo(regionId: string): Promise<boolean> {
         book = await load();
-        if (book.currentRegionId === regionId) return true;
         const mine = (await db.query.regions.findMany({ where: eq(regions.bookId, book.id) })).map((r) => r.id);
         const usable = await db.query.gates.findMany({ where: inArray(gates.regionId, mine) });
-        // breadth first over the gates
-        const cameBy = new Map<string, (typeof usable)[number]>();
-        const queue = [book.currentRegionId!];
-        const seen = new Set(queue);
-        while (queue.length > 0) {
-            const at = queue.shift()!;
-            if (at === regionId) break;
-            for (const gate of usable.filter((g) => g.regionId === at)) {
-                if (seen.has(gate.targetRegionId)) continue;
-                seen.add(gate.targetRegionId);
-                cameBy.set(gate.targetRegionId, gate);
-                queue.push(gate.targetRegionId);
-            }
-        }
-        const route: (typeof usable)[number][] = [];
-        for (let at = regionId; at !== book.currentRegionId; at = cameBy.get(at)!.regionId) {
-            const gate = cameBy.get(at);
+        for (let steps = 0; steps < 8 && book.currentRegionId !== regionId; steps++) {
+            const gate = firstGateToward(usable, book.currentRegionId!, regionId);
             if (!gate) {
                 problem(`no way from the hero's region to region ${regionId}`);
                 return false;
             }
-            route.unshift(gate);
-        }
-        for (const gate of route) {
+            const scene = await getScene(book);
+            if (!scene.gates.some((g) => g.id === gate.id && g.sought)) problem(`the gate to leave by ("${gate.label}") is not marked`);
             book = await syncPosition(await load(), { x: gate.x, z: gate.z });
             const moved = await travel(book, gate.id);
             console.log(`\n── through "${gate.label}" to ${moved.region.name}${moved.firstVisit ? " (first visit)" : ""}`);
-            if (Math.hypot(moved.book.x - gate.targetX, moved.book.z - gate.targetZ) > 0.01) problem("the hero did not arrive at the gate's far side");
-            const arrival = await handleArrival(ctx, moved.book, moved.region, moved.firstVisit);
-            if (moved.firstVisit && !arrival?.passage) problem(`no page was written on first reaching ${moved.region.name}`);
-            if (arrival) await after("arrival", arrival);
+            note(await arrive(moved.book, moved.region, moved.firstVisit));
+            book = await load();
         }
-        book = await load();
         return book.currentRegionId === regionId;
     }
 
-    async function talk(characterId: string, lines: string[], until?: (updates: QuestUpdate[]) => boolean): Promise<void> {
-        const who = (await db.query.characters.findFirst({ where: eq(characters.id, characterId) }))!;
+    /** talk until they have answered, or until it is time to ask them to */
+    async function talk(goal: Goal, lines: string[]): Promise<void> {
+        const who = (await db.query.characters.findFirst({ where: eq(characters.id, goal.targetCharacterId!) }))!;
+        if (!who.onstage) problem(`${who.name} is the target of the goal in hand but is off stage`);
         if (!who.regionId || !(await goTo(who.regionId))) return;
+        const scene = await getScene(book);
+        if (!scene.characters.some((c) => c.id === who.id && c.sought)) problem(`${who.name} is not marked in the world`);
         book = await syncPosition(await load(), { x: who.x + 1.5, z: who.z + 1.5 });
+
         const opened = await openDialogue(ctx, book, who.id);
-        console.log(`\n── with ${who.name} (${who.role})`);
+        console.log(`\n── with ${who.name} (${who.role}) — likes: ${opened.character.likes.join(", ") || "?"}; dislikes: ${opened.character.dislikes.join(", ") || "?"}`);
+        if (opened.character.likes.length === 0 || opened.character.dislikes.length === 0) problem(`${who.name} has no likes or dislikes to go by`);
+        if (!opened.stake) problem(`nothing is at stake with ${who.name}, though the goal in hand is theirs`);
+        if (!opened.greeted) problem(`${who.name} did not speak first, though the hero came about something new`);
         const greeting = opened.messages[opened.messages.length - 1];
-        if (opened.greeted) {
-            console.log(`   ${who.name}: ${show(greeting.segments)}`);
-            inspect(`${who.name}'s greeting`, greeting.segments);
-        }
+        console.log(`   ${who.name}: ${show(greeting.segments)}`);
+        inspect(`${who.name}'s greeting`, greeting.segments);
         if (opened.options.length !== 3) problem(`${who.name} offered ${opened.options.length} replies, not 3`);
+
+        let settled: GoalSettled | null = null;
         for (const line of lines) {
             book = await load();
             const turn = await say(ctx, book, who.id, { text: line });
-            console.log(`   > ${line}\n   ${who.name} (${turn.mood}, ${turn.affinityDelta >= 0 ? "+" : ""}${turn.affinityDelta} → ${turn.affinity}): ${show(turn.reply.segments)}`);
+            console.log(`   > ${line}\n   ${who.name} (${turn.mood}, ${turn.affinityDelta >= 0 ? "+" : ""}${turn.affinityDelta}${turn.stake?.lean !== null && turn.stake ? `, stands at ${turn.stake.lean}` : ""}): ${show(turn.reply.segments)}`);
             inspect(`${who.name}'s reply`, turn.reply.segments);
             if (/^["“]|I say|I reply|she says|he says/.test(segmentsToPlainText(turn.reply.segments))) problem(`${who.name} narrated instead of speaking`);
-            if (turn.playerMessage.note) console.log(`   note: ${JSON.stringify(turn.playerMessage.note)}, xp ${turn.xp}`);
-            await after(`talk with ${who.name}`, { passage: turn.beat, questUpdates: turn.questUpdates });
-            if (until?.(turn.questUpdates)) break;
+            if (turn.settled) {
+                settled = turn.settled;
+                console.log("   (they answered of their own accord)");
+                break;
+            }
+            if (!turn.stake) problem(`the stake vanished from the talk with ${who.name} without being settled`);
         }
+        if (!settled) {
+            book = await load();
+            const answer = await askForAnswer(ctx, book, who.id);
+            console.log(`   > (asks for their answer)\n   ${who.name}: ${show(answer.reply.segments)}`);
+            inspect(`${who.name}'s answer`, answer.reply.segments);
+            settled = answer.settled;
+            if (!settled) problem(`${who.name} was asked for an answer and gave none`);
+        }
+        note(settled);
+        const kept = await db.query.memories.findMany({ where: eq(memories.characterId, who.id) });
+        if (settled && kept.length === 0) problem(`${who.name} remembers nothing of having given their answer`);
     }
 
-    async function fight(enemyId: string): Promise<boolean> {
-        const foe = (await db.query.enemies.findFirst({ where: eq(enemies.id, enemyId) }))!;
-        if (foe.status !== "alive") {
-            problem(`${foe.name} is asked for by a quest but is already ${foe.status}`);
-            return false;
-        }
-        if (!(await goTo(foe.regionId))) return false;
+    async function fight(goal: Goal, toWin: boolean): Promise<void> {
+        const foe = (await db.query.enemies.findFirst({ where: eq(enemies.id, goal.targetEnemyId!) }))!;
+        if (foe.status !== "alive") problem(`${foe.name} is the goal in hand but is ${foe.status}`);
+        if (foe.respawns) problem(`${foe.name} is the goal in hand but would wander back if bested`);
+        if (!(await goTo(foe.regionId))) return;
         book = await syncPosition(await load(), { x: foe.x + 1, z: foe.z + 1 });
         const battle = await startEncounter(book, foe.id);
-        console.log(`\n── against ${foe.name} (${foe.tier}): "${battle.introLine}" — ${battle.totalStages} stages`);
+        console.log(`\n── against ${foe.name} (${foe.tier}): "${battle.introLine}" — ${battle.totalStages} stages${toWin ? "" : " (losing on purpose)"}`);
+        if (!battle.atStake) problem(`the battle with ${foe.name} does not say that a goal turns on it`);
         for (;;) {
             const row = (await db.query.encounters.findFirst({ where: eq(encounters.id, battle.id) }))!;
             const stage = row.stages[row.stageIndex];
-            if (!stage || row.status !== "active") return row.status === "won";
+            if (!stage || row.status !== "active") return;
             book = await load();
-            const result = await submitAnswer(ctx, book, battle.id, solve(stage));
-            if (!result.correct) problem(`the right answer to a ${stage.type} stage was marked wrong (${result.correctAnswer})`);
-            if (result.victory) {
-                console.log(`   won: "${result.victory.defeatLine}" — learned ${result.victory.learned.map((w) => w.lemma).join(", ") || "nothing new"}`);
-                if (foe.tier !== "minion" && !result.victory.passage) problem(`besting ${foe.name} (${foe.tier}) wrote no page`);
-                await after(`victory over ${foe.name}`, { passage: result.victory.passage, questUpdates: result.victory.questUpdates });
+            const result = await submitAnswer(book, battle.id, solve(stage, toWin));
+            if (toWin && !result.correct) problem(`the right answer to a ${stage.type} stage was marked wrong (${result.correctAnswer})`);
+            if (result.status !== "active") {
+                console.log(`   ${result.status}${result.victory ? `: "${result.victory.defeatLine}"` : ""}`);
+                note(result.settled);
+                if (!result.settled) problem(`the battle with ${foe.name} ended and settled nothing`);
+                if (!result.story) problem("the battle ended without saying how the story stands");
             }
         }
     }
 
-    async function lookAt(landmarkId: string): Promise<void> {
-        const thing = (await db.query.landmarks.findFirst({ where: eq(landmarks.id, landmarkId) }))!;
+    async function visit(goal: Goal, state: StoryState): Promise<void> {
+        if (goal.targetRegionId) {
+            await goTo(goal.targetRegionId);
+            return;
+        }
+        if (!state.beacon) {
+            problem(`"${goal.title}" sends the hero somewhere, and nothing marks where`);
+            return;
+        }
+        if (!(await goTo(state.beacon.regionId))) return;
+        console.log(`\n── walking to ${state.beacon.name}`);
+        book = await syncPosition(await load(), { x: state.beacon.x, z: state.beacon.z });
+        if (Math.hypot(book.x - state.beacon.x, book.z - state.beacon.z) > state.beacon.radius) problem(`${state.beacon.name} cannot be walked up to: the nearest ground is ${Math.hypot(book.x - state.beacon.x, book.z - state.beacon.z).toFixed(1)} m away`);
+        const arrived = await reach(book, goal.id);
+        note(arrived.settled);
+        if (!arrived.settled) problem(`reaching ${state.beacon.name} settled nothing`);
+    }
+
+    async function look(goal: Goal): Promise<void> {
+        const thing = (await db.query.landmarks.findFirst({ where: eq(landmarks.id, goal.targetLandmarkId!) }))!;
         if (!(await goTo(thing.regionId))) return;
+        const scene = await getScene(book);
+        if (!scene.landmarks.some((l) => l.id === thing.id && l.sought)) problem(`${thing.name} is not marked in the world`);
         book = await syncPosition(await load(), { x: thing.x + 2, z: thing.z + 2 });
         const found = await examine(ctx, book, thing.id);
         console.log(`\n── examining ${thing.name} (${thing.kind})`);
-        if (!found.passage) problem(`examining ${thing.name} wrote nothing`);
-        await after(`examining ${thing.name}`, found);
-    }
-
-    async function learn(objective: QuestObjective): Promise<void> {
-        // words are learned by winning them: fight whatever is about, nearest region first
-        for (let round = 0; round < 6; round++) {
-            const now = await db.query.questObjectives.findFirst({ where: eq(questObjectives.id, objective.id) });
-            if (!now || now.status !== "active") return;
-            book = await load();
-            const about = await db.query.enemies.findMany({ where: and(eq(enemies.bookId, book.id), eq(enemies.status, "alive")) });
-            const foe = about.find((e) => e.regionId === book.currentRegionId && e.tier === "minion")
-                ?? about.find((e) => e.tier === "minion") ?? about.find((e) => e.tier === "elite");
-            if (!foe) {
-                problem("there is nothing left to fight, and words still to learn");
-                return;
-            }
-            console.log(`   (${now.progress}/${now.targetCount} words so far)`);
-            await fight(foe.id);
-        }
-    }
-
-    const PERSUASION = [
-        "I know this is a lot to ask. Tell me what worries you, and I will listen before I ask again.",
-        "You have my word: I will see this through with you, and I will not leave you to face it alone.",
-        "I have already helped your neighbours, and I would do the same for you. Will you trust me with this?",
-        "Then let us do it together, at your pace. What would you need from me to say yes?",
-        "Thank you for hearing me. I will do exactly as you ask. Do we have an agreement?",
-    ];
-
-    /* ---------------------------------------------------------------- */
-    /* a long conversation, for the scribe                               */
-    /* ---------------------------------------------------------------- */
-
-    async function longTalk(): Promise<void> {
-        book = await load();
-        const who = await db.query.characters.findFirst({ where: and(eq(characters.bookId, book.id), eq(characters.regionId, book.currentRegionId!)) });
-        if (!who) return;
-        await talk(who.id, [
-            "My name is Claude, and I come from a town of clockmakers far to the north.",
-            "What is the best thing to eat here?",
-            "I am afraid of deep water. I never learned to swim.",
-            "Who in this place do you trust the most?",
-            "I promise to bring you a gift from wherever I travel next.",
-            "What did this place look like when you were a child?",
-            "Is there a song people sing here?",
-            "What would you do if you could leave for a year?",
-            "Do you remember where I said I come from, and what I am afraid of?",
-        ]);
-        // the scribe works after the answer has been given
-        await new Promise((resolve) => setTimeout(resolve, 9000));
-        const talkOf = await db.query.conversations.findFirst({ where: and(eq(conversations.bookId, book.id), eq(conversations.characterId, who.id)) });
-        const kept = await db.query.memories.findMany({ where: eq(memories.characterId, who.id) });
-        console.log(`\n   conversation: ${talkOf?.messageCount} lines, ${talkOf?.summarizedCount} folded into the summary:\n   ${talkOf?.summary || "(no summary)"}`);
-        console.log(`   ${who.name} remembers:\n${kept.map((m) => `     (${m.kind}, ${m.importance}) ${m.content}`).join("\n") || "     nothing"}`);
-        if ((talkOf?.messageCount ?? 0) >= 18 && !talkOf?.summary) problem("a long conversation was never summarised");
-        if (kept.length === 0) problem(`${who.name} remembers nothing of a long conversation`);
+        if (found.page) readPages(`examining ${thing.name}`, [found.page]);
+        else problem(`examining ${thing.name} wrote nothing`);
+        note(found.settled);
+        if (!found.settled) problem(`examining ${thing.name} settled nothing`);
     }
 
     /* ---------------------------------------------------------------- */
     /* play                                                              */
     /* ---------------------------------------------------------------- */
 
-    for (let turned = 0; turned < chaptersToTurn; turned++) {
-        book = await load();
-        if (book.status !== "active") break;
-        console.log(`\n════ ${book.arcStage} ════`);
-
-        for (let pass = 0; pass < 4; pass++) {
-            book = await load();
-            const open = await db.query.quests.findMany({
-                where: and(eq(quests.bookId, book.id), eq(quests.status, "active")),
-                orderBy: [asc(quests.sortIndex)],
-                with: { objectives: { orderBy: [asc(questObjectives.sortIndex)] } },
-            });
-            if (open.length === 0) break;
-            for (const quest of open) {
-                console.log(`\n▶ quest "${quest.title}": ${quest.description}`);
-                if (quest.objectives.length === 0) problem(`quest "${quest.title}" has no objectives`);
-                for (const objective of quest.objectives) {
-                    const now = await db.query.questObjectives.findFirst({ where: eq(questObjectives.id, objective.id) });
-                    if (!now || now.status !== "active") continue;
-                    console.log(`\n  ○ [${objective.kind}] ${objective.description}`);
-                    try {
-                        if (objective.kind === "talkTo" && objective.targetCharacterId) {
-                            await talk(objective.targetCharacterId, ["Hello! I was told to come and find you. What should I know?"]);
-                        } else if (objective.kind === "persuade" && objective.targetCharacterId) {
-                            await talk(objective.targetCharacterId, PERSUASION,
-                                (updates) => updates.some((u) => u.objectiveDescription === objective.description || u.failed));
-                        } else if (objective.kind === "defeat" && objective.targetEnemyId) {
-                            await fight(objective.targetEnemyId);
-                        } else if (objective.kind === "visit" && objective.targetRegionId) {
-                            await goTo(objective.targetRegionId);
-                        } else if (objective.kind === "inspect" && objective.targetLandmarkId) {
-                            await lookAt(objective.targetLandmarkId);
-                        } else if (objective.kind === "learnWords") {
-                            await learn(objective);
-                        } else {
-                            problem(`objective "${objective.description}" (${objective.kind}) points at nothing`);
-                        }
-                    } catch (error) {
-                        problem(`${objective.kind} "${objective.description}" threw: ${error instanceof Error ? error.message : String(error)}`);
-                    }
-                    const done = await db.query.questObjectives.findFirst({ where: eq(questObjectives.id, objective.id) });
-                    if (done?.status === "active") console.log(`   (still open: ${done.progress}/${done.targetCount})`);
-                }
-            }
-        }
-
-        if (turned === 0) await longTalk();
-
-        book = await load();
-        const left = await db.query.quests.findMany({ where: and(eq(quests.bookId, book.id), eq(quests.status, "active")), with: { objectives: true } });
-        if (!(await isChapterTurnReady(book))) {
-            problem(`the chapter cannot turn: ${left.map((q) => `"${q.title}" [${q.objectives.filter((o) => o.status === "active").map((o) => o.kind).join(", ")}]`).join("; ") || "no quests at all"}`);
-            break;
-        }
-
-        const before = await db.query.regions.findMany({ where: eq(regions.bookId, book.id) });
-        const began = Date.now();
-        const turn = await turnChapter(ctx, book);
-        console.log(`\n════ the page turns (${((Date.now() - began) / 1000).toFixed(0)}s) ════`);
-        console.log(`closed "${turn.closedChapter.title}": ${turn.closedChapter.summary}`);
-        console.log(`opened "${turn.newChapter.title}"${turn.storyCompleted ? " — THE END" : ""}\n${show(turn.passage.segments)}`);
-        inspect("the chapter's first page", turn.passage.segments);
-        for (const quest of turn.quests.filter((q) => q.status === "active")) {
-            console.log(`  new quest "${quest.title}": ${quest.objectives.map((o) => `[${o.kind}] ${o.description}${o.whereName ? ` (in ${o.whereName})` : ""}`).join("; ")}`);
-        }
-        book = await load();
-        if (!turn.storyCompleted && turn.quests.filter((q) => q.status === "active").length === 0) problem("the new chapter has no quests");
-        if (!turn.storyCompleted && await isChapterTurnReady(book)) problem("the new chapter is ready to turn before it has begun");
-
-        await surveyWorld(before.map((r) => r.id));
+    let failed = false;
+    let turned = 0;
+    await showOutline();
+    {
+        const inHand = (await chaptersOf(bookId)).find((chapter) => chapter.status === "open");
+        if (inHand) await showGoals(inHand.id, `the goals of chapter ${inHand.index}:`);
     }
 
-    /** a place is added the way a chapter turn would add one, whether or not this book's chapters asked for it */
-    if (args.includes("--grow")) {
+    for (let step = 0; step < 90 && turned < chaptersToTurn; step++) {
         book = await load();
-        const before = await db.query.regions.findMany({ where: eq(regions.bookId, book.id) });
-        console.log("\n════ the world grows ════");
-        const began = Date.now();
-        const added = await forgeRegion(ctx, book, {
-            kind: "wilds", name: "The Goat Stairs", biome: "highland", timeOfDay: "golden", weather: "mist",
-            ambience: "Wind combs the grass on the high steps, and goat bells answer one another across the mist.",
-            description: "A stair of green terraces climbing above the town. The old folk say the first bell was carried down it.",
-            themeWords: ["goat", "stone", "wind", "cloud", "path", "bell"],
-        });
-        console.log(`made in ${((Date.now() - began) / 1000).toFixed(0)}s`);
-        if (!added) problem("the world had no room for a new place");
-        else {
-            await surveyWorld(before.map((r) => r.id));
-            await goTo(added.id);
-            const someone = await db.query.characters.findFirst({ where: eq(characters.regionId, added.id) });
-            if (someone) await talk(someone.id, ["Hello! I have only just climbed up here. Who are you, and what is this place?"]);
+        if (book.status !== "active") break;
+        const state = await storyState(book);
+
+        if (state.due === "page" || state.due === "bend" || state.due === "plan") {
+            console.log(`\n── the book ${state.due === "page" ? "tells" : state.due === "bend" ? "bends: the road is written again" : "is outlined, and its goals written"}`);
+            const began = Date.now();
+            const before = state.due;
+            const moved = await advance(ctx, book);
+            console.log(`   (${((Date.now() - began) / 1000).toFixed(0)}s)`);
+            readPages("told", moved.pages);
+            if (before !== "page") {
+                await showOutline();
+                const inHand = (await chaptersOf(book.id)).find((chapter) => chapter.status === "open");
+                if (inHand) {
+                    const list = await showGoals(inHand.id, before === "bend" ? "the road, written again:" : "the goals:");
+                    if (before === "bend") {
+                        if (!list.some((goal) => goal.status === "failed" && goal.mended)) problem("the failure was not marked as mended");
+                        if (!list.some((goal) => goal.status === "dropped")) console.log("   (nothing was left of the old road to drop)");
+                        const fresh = list.filter((goal) => goal.status !== "dropped" && goal.status !== "failed" && goal.sortIndex > Math.max(...list.filter((g) => g.status === "failed").map((g) => g.sortIndex)));
+                        if (fresh.length === 0) problem("no new road was written after the failure");
+                        else if (fresh[0].kind !== "tell") problem("the new road does not begin by telling what the failure meant");
+                    }
+                }
+            }
+            if (moved.pages.length === 0 && moved.story.due === before) {
+                problem(`the book was asked to move on and did not: still "${before}"`);
+                break;
+            }
+            continue;
         }
+
+        if (state.due === "turn") {
+            const before = await db.query.regions.findMany({ where: eq(regions.bookId, book.id) });
+            const began = Date.now();
+            const turn = await turnChapter(ctx, book);
+            turned++;
+            console.log(`\n════ the page turns (${((Date.now() - began) / 1000).toFixed(0)}s) ════`);
+            console.log(`closed "${turn.closedChapter.title}": ${turn.closedChapter.summary}`);
+            if (turn.closedChapter.summary.length < 40) problem("the closed chapter has next to no summary");
+            if (turn.storyCompleted) {
+                console.log("THE END");
+                break;
+            }
+            console.log(`opened "${turn.newChapter?.title}"`);
+            readPages("the chapter's first", turn.pages);
+            if (turn.pages.length === 0) problem("the new chapter began without a page");
+            if (turn.story.goals.length === 0 && turn.story.ahead === 0) problem("the new chapter asks nothing of the hero");
+            const opened = (await chaptersOf(book.id)).find((chapter) => chapter.status === "open");
+            if (opened) await showGoals(opened.id, "its goals:");
+            await surveyWorld(before.map((r) => r.id));
+            continue;
+        }
+
+        // the goal in hand is the hero's to do
+        const inHand = (await chaptersOf(book.id)).find((chapter) => chapter.status === "open");
+        if (!inHand) {
+            problem("no chapter is open, and the book says nothing is due");
+            break;
+        }
+        const list = await goalsOf(inHand.id);
+        const due = whatIsDue(list);
+        if (due.what !== "reader") {
+            problem(`the story says the next thing is the reader's, and the goals say "${due.what}"`);
+            break;
+        }
+        const goal = due.goal;
+        const shown = checklist(list).shown;
+        if (state.goals.length !== shown.length) problem("the checklist shown is not the checklist");
+        if (state.goals.some((view) => (view.kind as string) === "tell")) problem("a tell is shown in the checklist");
+        console.log(`\n▶ [${goal.kind}] ${goal.title}${state.goals.find((g) => g.id === goal.id)?.whereName ? ` — in ${state.goals.find((g) => g.id === goal.id)?.whereName}` : ""}   (${state.ahead} more to come)`);
+
+        const fail = !failed && failAt === goal.kind;
+        try {
+            if (goal.kind === "visit") await visit(goal, state);
+            else if (goal.kind === "talk") await talk(goal, fail ? LOSING : ASKING);
+            else if (goal.kind === "persuade") await talk(goal, fail ? LOSING : WINNING);
+            else if (goal.kind === "fight") await fight(goal, !fail);
+            else if (goal.kind === "examine") await look(goal);
+        } catch (error) {
+            problem(`${goal.kind} "${goal.title}" threw: ${error instanceof Error ? error.message : String(error)}`);
+            break;
+        }
+        const after = await db.query.goals.findFirst({ where: eq(goals.id, goal.id) });
+        if (after?.status === "active") {
+            problem(`"${goal.title}" is still in hand after being played`);
+            break;
+        }
+        if (fail) {
+            failed = true;
+            if (after?.status !== "failed") console.log(`   (the hero tried to fail and could not: ${after?.status})`);
+        }
+    }
+
+    if (failAt && !failed) console.log(`\n(no ${failAt} goal came up, so none was failed)`);
+
+    /* ---------------------------------------------------------------- */
+    /* writing to someone from afar                                      */
+    /* ---------------------------------------------------------------- */
+
+    book = await load();
+    const met = (await getPeople(book)).filter((person) => !person.gone);
+    if (met.length > 0 && book.status === "active") {
+        const friend = met[0];
+        console.log(`\n── writing to ${friend.name} from afar (${friend.here ? "though they are near" : `they are in ${friend.whereName}`})`);
+        const opened = await openDialogue(ctx, book, friend.id, { remote: true });
+        if (!opened.remote) problem("a talk opened from afar does not say so");
+        if (opened.stake) problem("something is at stake in a talk from afar");
+        const turn = await say(ctx, book, friend.id, { text: "I was thinking of you. Do you remember what we last spoke about?" }, { remote: true });
+        console.log(`   ${friend.name}: ${show(turn.reply.segments)}`);
+        inspect(`${friend.name}'s letter`, turn.reply.segments);
+        if (turn.settled) problem("a goal was settled from afar");
+    } else if (book.status === "active") {
+        console.log("\n(the hero has met nobody yet, so nobody could be written to)");
+    }
+    const stranger = await db.query.characters.findFirst({
+        where: and(eq(characters.bookId, book.id), eq(characters.status, "alive")),
+        with: { relationship: true },
+    });
+    const strangers = (await db.query.characters.findMany({ where: eq(characters.bookId, book.id) }))
+        .filter((c) => !met.some((m) => m.id === c.id));
+    if (stranger && strangers.length > 0) {
+        const refused = await openDialogue(ctx, book, strangers[0].id, { remote: true }).then(() => false, () => true);
+        if (!refused) problem(`${strangers[0].name}, whom the hero has never met, could be written to from afar`);
     }
 
     /** what has been added to the world since `known`, and whether every region still agrees with its own layout */
@@ -385,54 +461,51 @@ async function main() {
             const folk = await db.query.characters.findMany({ where: eq(characters.regionId, place.id) });
             const beasts = await db.query.enemies.findMany({ where: eq(enemies.regionId, place.id) });
             const things = await db.query.landmarks.findMany({ where: eq(landmarks.regionId, place.id) });
-            console.log(`  new place ${place.key} ${place.name} (${place.kind}, ${place.biome}): ${folk.map((c) => `${c.name}, ${c.role}`).join("; ") || "nobody"} | ${beasts.map((e) => e.name).join(", ") || "no creatures"} | ${things.map((t) => `${t.name}${t.labelEntryId ? "" : " (no label)"}`).join(", ") || "no landmarks"} | gates ${place.gates.map((g) => g.side).join("")}`);
+            console.log(`  new place ${place.key} ${place.name} (${place.kind}, ${place.biome}): ${folk.map((c) => `${c.name}, ${c.role}`).join("; ") || "nobody"} | ${beasts.map((e) => e.name).join(", ") || "no creatures"} | ${things.map((t) => t.name).join(", ") || "no landmarks"} | gates ${place.gates.map((g) => g.side).join("")}`);
             if (place.gates.length === 0) problem(`${place.name} cannot be reached: it has no gate`);
-            if (folk.length === 0 || beasts.length === 0 || things.length === 0) problem(`${place.name} is missing people, creatures or landmarks`);
         }
         for (const place of places) {
             const sides = place.gates.map((g) => g.side as GateSide);
             const layout = generateLayout({ seed: place.seed, kind: place.kind, biome: place.biome as never, gates: sides });
-            // every gate must stand where the layout of its region, as it now is, puts the gate of that side
             for (const gate of place.gates) {
                 const slot = layout.gates[gate.side as GateSide];
                 if (Math.hypot(slot.x - gate.x, slot.z - gate.z) > 0.01) problem(`the ${gate.side} gate of ${place.name} is not where its layout has it`);
-                const far = places.find((p) => p.id === gate.targetRegionId)?.gates.find((g) => g.targetRegionId === place.id);
-                if (!far) problem(`the ${gate.side} gate of ${place.name} leads somewhere with no way back`);
             }
-            // and nothing that stands in the region may stand on one of its roads
-            const [houses, things, folk] = await Promise.all([
+            const [houses, folk] = await Promise.all([
                 db.query.buildings.findMany({ where: eq(buildings.regionId, place.id) }),
-                db.query.landmarks.findMany({ where: eq(landmarks.regionId, place.id) }),
-                db.query.characters.findMany({ where: eq(characters.regionId, place.id) }),
+                db.query.characters.findMany({ where: and(eq(characters.regionId, place.id), eq(characters.status, "alive")) }),
             ]);
-            for (const trail of layout.trails) {
+            // nobody may stand inside a building, on top of anybody else, or out in a road
+            for (const person of folk) {
                 for (const house of houses) {
-                    if (distToTrail(house, trail) < Math.min(house.width, house.depth) / 2) problem(`a road of ${place.name} runs through ${house.name}`);
+                    if (Math.hypot(house.x - person.x, house.z - person.z) < Math.min(house.width, house.depth) / 2) problem(`${person.name} stands inside ${house.name}`);
                 }
-                if (place.kind !== "settlement") continue;
-                for (const thing of things) {
-                    if (Math.hypot(thing.x, thing.z) > 14 && distToTrail(thing, trail) < 2.5) problem(`a road of ${place.name} runs over ${thing.name}`);
+                for (const other of folk) {
+                    if (other.id !== person.id && Math.hypot(other.x - person.x, other.z - person.z) < 1.2) problem(`${person.name} stands on top of ${other.name}`);
                 }
-                for (const person of folk) {
-                    if (Math.hypot(person.x, person.z) > 14 && distToTrail(person, trail) < 1.5) problem(`${person.name} stands in a road of ${place.name}`);
+                if (place.kind === "settlement" && Math.hypot(person.x, person.z) > 14) {
+                    for (const trail of layout.trails) if (distToTrail(person, trail) < 1.5) problem(`${person.name} stands in a road of ${place.name}`);
                 }
             }
         }
     }
+    await surveyWorld((await db.query.regions.findMany({ where: eq(regions.bookId, book.id) })).map((r) => r.id));
 
     /* ---------------------------------------------------------------- */
     /* the account of it                                                 */
     /* ---------------------------------------------------------------- */
 
     book = await load();
-    const [written, open, calls] = await Promise.all([
+    const [written, calls, talks] = await Promise.all([
         db.query.chapters.findMany({ where: eq(chapters.bookId, book.id), orderBy: [asc(chapters.index)] }),
-        db.query.threads.findMany({ where: eq(threads.bookId, book.id) }),
         db.query.aiUsage.findMany({ where: and(eq(aiUsage.userId, userId), gte(aiUsage.createdAt, startedAll)) }),
+        db.query.conversations.findMany({ where: eq(conversations.bookId, book.id) }),
     ]);
-    console.log(`\nchapters: ${written.map((c) => `${c.index}. ${c.title}`).join(" | ")}`);
-    console.log(`threads: ${open.map((t) => `${t.title} [${t.status}, ${t.importance}]`).join("; ")}`);
-    console.log(`director's note: ${book.directorNote || "(none)"}`);
+    console.log(`\nchapters: ${written.map((c) => `${c.index}. ${c.title} [${c.status}]`).join(" | ")}`);
+    console.log(`the hero carries: ${book.belongings.join("; ") || "nothing"}`);
+    console.log(`conversations: ${talks.length}, ${talks.reduce((sum, t) => sum + t.messageCount, 0)} lines in all`);
+    console.log(`\nwhat the book remembers of itself:\n${await storySoFar(book)}`);
+    if (book.writingSince) problem("the book is still marked as being written");
 
     const byTask = new Map<string, { calls: number; failed: number; ms: number; cost: number; input: number; cached: number }>();
     for (const call of calls) {
@@ -450,10 +523,12 @@ async function main() {
         console.log(`  ${task.padEnd(18)} ${String(row.calls).padStart(3)} call(s)${row.failed ? `, ${row.failed} FAILED` : ""}, ${(row.ms / row.calls / 1000).toFixed(1)}s each, ${Math.round((100 * row.cached) / Math.max(1, row.input))}% cached, ${formatMoney(row.cost)}`);
         if (row.failed > 0) problem(`${row.failed} ${task} call(s) failed`);
     }
-    console.log(`  total ${formatMoney(calls.reduce((sum, c) => sum + c.costMicros, 0))}`);
+    console.log(`  total ${calls.length} calls, ${formatMoney(calls.reduce((sum, c) => sum + c.costMicros, 0))}`);
 
     console.log(problems.length === 0 ? "\nNo problems found." : `\n${problems.length} PROBLEM(S):\n${problems.map((p) => `  - ${p}`).join("\n")}`);
     console.log(`book id: ${book.id}`);
+    // housekeeping started by the last turn may still be writing
+    await new Promise((resolve) => setTimeout(resolve, 4000));
     if (!keep && !reuse) {
         await db.delete(books).where(eq(books.id, book.id));
         console.log("(book deleted — pass --keep to leave it on the shelf)");

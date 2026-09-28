@@ -23,7 +23,7 @@ OpenAI (structured output, speech, transcription) · Tailwind 4 · Jotai
 1. `.env.local` needs `DATABASE_URL`, `OPENAI_API_KEY`, `AUTH_SECRET`, `AUTH_URL`, and
    `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` and/or `EMAIL` / `EMAIL_PASS` (Gmail, for sign-in links).
    Optional: `OPENAI_MODEL_STORY` (default `gpt-6-sol`), `OPENAI_MODEL_SCRIBE` (default
-   `gpt-6-luna`), `USAGE_MARKUP` (default 1), `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET`.
+   `gpt-6-luna`), `USAGE_MARKUP` (default 1). Card payments: see below.
 2. Apply the schema: `npm run db:push`
 3. Load the dictionaries (about 620 MB to download, 1 GB in Postgres, ten minutes):
    ```bash
@@ -35,6 +35,35 @@ OpenAI (structured output, speech, transcription) · Tailwind 4 · Jotai
 4. For test mode, put `TEST_MODE_SECRET=<16+ random characters>` in `.env.development.local`,
    then `npm run test:seed`.
 5. `npm run dev` — the app is on port 3011.
+
+## Card payments (PowerTranz)
+
+The wallet is topped up by card through PowerTranz. Until it is configured the packages are shown
+with their buttons off and everything else works.
+
+| variable | |
+|---|---|
+| `POWERTRANZ_ID`, `POWERTRANZ_PASSWORD` | the merchant's credentials |
+| `POWERTRANZ_ENV` | `staging` (default) or `production` |
+| `POWERTRANZ_HOSTED_PAGE_SET`, `POWERTRANZ_HOSTED_PAGE_NAME` | a hosted payment page made in the merchant portal: PowerTranz takes the card and this app never sees it. **The way to go.** |
+| `POWERTRANZ_CARD_FORM=own` | instead of a hosted page: the card is typed into this app's own form and passes through its server. Works at once, but puts the server in scope for PCI DSS. |
+| `POWERTRANZ_CURRENCY` | `USD` (default) or `JMD`, whichever the merchant account takes |
+| `POWERTRANZ_JMD_PER_USD` | your rate, when charging JMD: a $6 package at 160 is charged J$960 |
+| `POWERTRANZ_REQUIRE_3DS` | `true` (default): a payment the bank approved without verifying the cardholder is given back at once |
+| `POWERTRANZ_BASE_URL`, `POWERTRANZ_EXPIRY_FORMAT` | overrides, should the gateway differ from what is assumed |
+
+`AUTH_URL` must be the public address of the site: the bank sends the player back to
+`AUTH_URL/api/payments/powertranz/callback`.
+
+**It has not yet been run against PowerTranz itself**, only against the test gateway built into
+the development server, which answers in the same shapes. Make one payment on staging before
+taking real money; `server/payments/powertranz.ts` lists what to confirm.
+
+- `npx tsx --conditions=react-server scripts/checkPayments.ts` walks every outcome against the
+  test gateway (dev server running).
+- `npx tsx --conditions=react-server scripts/refundTopup.ts <topupId>` gives a payment back.
+- Signed in as a test account in development, the wallet pays through the test gateway: a page of
+  buttons stands in for the bank. No card is charged.
 
 ## Where things live
 

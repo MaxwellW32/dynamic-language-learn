@@ -3,8 +3,8 @@
 import { atom } from "jotai";
 import type { Interactable } from "@/engine";
 import type {
-    BookOverview, ChapterView, ChronicleEntry, DialogueState, EncounterView, LearnerView,
-    PassageView, QuestView, ScenePayload, WalletView,
+    BookOverview, ChapterView, ChronicleEntry, DialogueState, EncounterView, GoalSettled, LearnerView,
+    PassageView, PersonView, ScenePayload, StoryState, WalletView,
 } from "@/game/payloads";
 
 /**
@@ -18,13 +18,15 @@ export type GameMode = "explore" | "dialogue" | "battle" | "reading" | "travelli
 export const bookAtom = atom<BookOverview["book"] | null>(null);
 export const sceneAtom = atom<ScenePayload | null>(null);
 export const regionsAtom = atom<BookOverview["regions"]>([]);
-export const questsAtom = atom<QuestView[]>([]);
+/** the chapter in hand and its goals: what the story asks, and what it will do next without being asked */
+export const storyAtom = atom<StoryState | null>(null);
+/** everyone the hero has met */
+export const peopleAtom = atom<PersonView[]>([]);
 export const chaptersAtom = atom<ChapterView[]>([]);
 export const passagesAtom = atom<PassageView[]>([]);
 export const chronicleAtom = atom<ChronicleEntry[]>([]);
 export const learnerAtom = atom<LearnerView | null>(null);
 export const walletAtom = atom<WalletView | null>(null);
-export const chapterTurnReadyAtom = atom(false);
 
 export const modeAtom = atom<GameMode>("explore");
 /** the thing the hero is standing next to and could act on */
@@ -32,12 +34,16 @@ export const nearestAtom = atom<Interactable | null>(null);
 /** a short line about what is being waited for; null when nothing is */
 export const busyAtom = atom<string | null>(null);
 
-export const dialogueAtom = atom<DialogueState | null>(null);
+/** a conversation in progress, and the answer that ended what was at stake in it, if one has been given */
+export type Conversation = DialogueState & { settled: GoalSettled | null };
+export const dialogueAtom = atom<Conversation | null>(null);
 export const encounterAtom = atom<EncounterView | null>(null);
 /** the passage laid over the world for reading: new pages, and old ones reread */
 export const readingAtom = atom<PassageView | null>(null);
+/** pages already written that come after the one being read */
+export const queueAtom = atom<PassageView[]>([]);
 
-export type JournalTab = "story" | "quests" | "words" | "map" | "chronicle";
+export type JournalTab = "story" | "goals" | "people" | "words" | "map" | "chronicle";
 export const journalAtom = atom<JournalTab | null>(null);
 
 /** the joystick under a thumb, in screen pixels, while it is held */

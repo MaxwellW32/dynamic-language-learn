@@ -10,7 +10,7 @@ import {
  *
  * Rules for structured output: `.nullable()`, never `.optional()`; no
  * records. The model never sees a database id — words, people, places and
- * objectives are referred to by the short keys we hand it (w1, n2, o3…), and
+ * goals are referred to by the short keys we hand it (w1, n2, r1…), and
  * every key is checked against what was offered on the way back.
  *
  * Wherever the model chooses how something *looks*, the schema is a plain
@@ -88,11 +88,16 @@ const castMember = z.object({
     secret: z.string().min(1),
     goal: z.string().min(1),
     speechStyle: z.string().min(1),
+    /** two or three things that warm them to someone, a few words each */
+    likes: z.array(z.string()),
+    /** two or three things that put them off */
+    dislikes: z.array(z.string()),
     look: lookSchema,
     voice: z.string().describe(TTS_VOICES.join(" | ")),
     /** three short things they call out in the TARGET language as the hero walks by */
     barks: z.array(z.object({ target: z.string(), translation: z.string() })),
 });
+export type CastMember = z.infer<typeof castMember>;
 
 const creature = z.object({
     key: z.string(),
@@ -130,50 +135,75 @@ export const placesFillSchema = z.object({
 
 export type WorldFill = z.infer<typeof castFillSchema> & z.infer<typeof placesFillSchema>;
 
-const questSketch = z.object({
+/* ------------------------------------------------------------------ */
+/* the outline and the goals                                           */
+/* ------------------------------------------------------------------ */
+
+const chapterSketch = z.object({
     title: z.string().min(1),
+    stage: z.enum(["introduction", "rising", "climax", "falling", "resolution"]),
+    /** what the chapter is for and where it must end; never shown to the reader */
     description: z.string().min(1),
-    giverKey: z.string().nullable(),
-    objectives: z.array(z.object({
-        description: z.string().min(1),
-        kind: z.enum(["talkTo", "persuade", "defeat", "visit", "inspect", "learnWords"]),
-        /** npc key (talkTo, persuade), creature key (defeat), region key (visit), landmark key (inspect); null for learnWords */
-        targetKey: z.string().nullable(),
-        /** learnWords only */
-        wordCount: z.number().int().min(1).max(20).nullable(),
-    })),
 });
-export type QuestSketch = z.infer<typeof questSketch>;
+export type ChapterSketch = z.infer<typeof chapterSketch>;
 
-const threadSketch = z.object({
+const goalSketch = z.object({
+    kind: z.enum(["tell", "visit", "talk", "persuade", "fight", "examine"]),
+    /** what the reader's checklist says; for a tell, a working title they never see */
     title: z.string().min(1),
-    kind: z.enum(["mystery", "promise", "conflict", "bond"]),
-    summary: z.string().min(1),
-    importance: z.number().int().min(1).max(10),
+    /** for whoever writes or speaks when the goal comes due */
+    brief: z.string().min(1),
+    /** tell: null · visit: a place, building or landmark key · talk, persuade: a person key · fight: a creature key · examine: a landmark key */
+    targetKey: z.string().nullable(),
+    /** what the hero has in hand if it goes well, or null */
+    gains: z.string().nullable(),
+    /** keys of people who step into the story at this goal */
+    enters: z.array(z.string()),
+    /** people the story moves once this goal is done; "to" is a place key, or "gone" */
+    moves: z.array(z.object({ who: z.string(), to: z.string() })),
 });
+export type GoalSketch = z.infer<typeof goalSketch>;
 
-export const openingSchema = z.object({
-    chapterTitle: z.string().min(1),
-    passage: z.array(aiSegmentSchema),
-    quests: z.array(questSketch),
-    threads: z.array(threadSketch),
+/** the whole book in outline, and the goals of the chapter it begins (or goes on) with */
+export const outlineSchema = z.object({
+    chapters: z.array(chapterSketch),
+    goals: z.array(goalSketch),
 });
-export type Opening = z.infer<typeof openingSchema>;
+export type Outline = z.infer<typeof outlineSchema>;
+
+const newPerson = castMember.extend({
+    /** the key of the place they are found in */
+    placeKey: z.string(),
+});
+export type NewPerson = z.infer<typeof newPerson>;
+
+/** a chapter's goals: all of them when it begins, or the rest of them after one has failed */
+export const goalPlanSchema = z.object({
+    /** what happened in the chapter that has just ended, for the table of contents; null when none has */
+    closingSummary: z.string().nullable(),
+    goals: z.array(goalSketch),
+    /** people the story now needs who do not exist yet; usually empty */
+    newPeople: z.array(newPerson),
+    /** a place the story now needs that does not exist yet, or null */
+    newPlace: regionSketch.extend({ kind: z.enum(["settlement", "wilds", "depths"]) }).nullable(),
+    /** people whose aim has changed because of what happened */
+    shifts: z.array(z.object({ who: z.string(), wants: z.string().min(1) })),
+});
+export type GoalPlan = z.infer<typeof goalPlanSchema>;
 
 /* ------------------------------------------------------------------ */
 /* live play                                                           */
 /* ------------------------------------------------------------------ */
 
-export const narrationSchema = z.object({
-    passage: z.array(aiSegmentSchema),
-    /** one past-tense line for the chronicle, or null if nothing worth remembering happened */
-    eventSummary: z.string().nullable(),
-    /** how much this moment matters to the story, 1 trivial … 10 defining */
-    importance: z.number().int().min(1).max(10),
-    /** two or three things the reader may do next, only at a real fork; otherwise null */
-    choices: z.array(z.object({ label: z.string().min(1), tone: z.string().min(1) })).nullable(),
+/** pages the storyteller writes: one for each thing it was asked to tell */
+export const tellingSchema = z.object({
+    pages: z.array(z.object({
+        /** the key the page was asked for under */
+        key: z.string(),
+        passage: z.array(aiSegmentSchema),
+    })),
 });
-export type Narration = z.infer<typeof narrationSchema>;
+export type Telling = z.infer<typeof tellingSchema>;
 
 export const characterTurnSchema = z.object({
     reply: z.array(aiSegmentSchema),
@@ -205,58 +235,18 @@ export const characterTurnSchema = z.object({
         /** dictionary forms of the target-language words the hero used correctly */
         usedWords: z.array(z.string()),
     }).nullable(),
-    objectiveAchieved: z.string().nullable(),
-    objectiveFailed: z.string().nullable(),
+    /** where they stand on what the hero has come for, -5 … 5; null when nothing is at stake */
+    lean: z.number().int().min(-5).max(5).nullable(),
+    /** their answer, once they have one; null while they are still making up their mind */
+    decision: z.enum(["yes", "no"]).nullable(),
+    /** with a decision: one past-tense line for the book's record of what came of it */
+    outcome: z.string().nullable(),
 });
 export type CharacterTurn = z.infer<typeof characterTurnSchema>;
 
-export const greetingSchema = z.object({
-    reply: z.array(aiSegmentSchema),
-    mood: z.string().min(1),
-    gesture: z.enum(["none", "nod", "wave", "bow", "cheer", "talk"]),
-    options: characterTurnSchema.shape.options,
-});
-
-export const chapterTurnSchema = z.object({
-    closingSummary: z.string().min(1),
-    nextChapterTitle: z.string().min(1),
-    passage: z.array(aiSegmentSchema),
-    quests: z.array(questSketch),
-    /** facts that have become true and must be remembered from now on */
-    newFacts: z.array(z.string()),
-    /** a new place the story opens up, or null */
-    newRegion: regionSketch.extend({ kind: z.enum(["settlement", "wilds", "depths"]) }).nullable(),
-});
-export type ChapterTurn = z.infer<typeof chapterTurnSchema>;
-
 /* ------------------------------------------------------------------ */
-/* the director and the scribe                                         */
+/* the scribe                                                          */
 /* ------------------------------------------------------------------ */
-
-export const directorSchema = z.object({
-    threads: z.array(z.object({
-        /** the key of a thread from the brief, or null to open a new one */
-        key: z.string().nullable(),
-        title: z.string().min(1),
-        kind: z.enum(["mystery", "promise", "conflict", "bond"]),
-        summary: z.string().min(1),
-        status: z.enum(["open", "resolved", "dropped"]),
-        importance: z.number().int().min(1).max(10),
-    })),
-    /** how characters have been changed by what happened */
-    shifts: z.array(z.object({
-        key: z.string(),
-        goal: z.string().nullable(),
-        mood: z.string().nullable(),
-        /** something they have now heard about, in their own words, or null */
-        heard: z.string().nullable(),
-    })),
-    /** a quest the story now calls for, or null */
-    quest: questSketch.nullable(),
-    /** one or two sentences telling the narrator where to lean next */
-    note: z.string(),
-});
-export type Direction = z.infer<typeof directorSchema>;
 
 export const summarySchema = z.object({
     summary: z.string().min(1),

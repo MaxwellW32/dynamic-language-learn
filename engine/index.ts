@@ -6,7 +6,7 @@
  */
 import * as THREE from "three";
 import type { Biome, LandmarkKind } from "@/game/looks";
-import type { ScenePayload, SceneCharacter, SceneEnemy, SceneGate, SceneLandmark } from "@/game/payloads";
+import type { Beacon, ScenePayload, SceneCharacter, SceneEnemy, SceneGate, SceneLandmark } from "@/game/payloads";
 import type { Segment } from "@/game/segments";
 import {
     clampToReach, facing, generateLayout, INTERACT_RANGE, withinReach,
@@ -16,7 +16,7 @@ import { buildHeightfield, type Heightfield } from "@/game/worldgen/terrain";
 import { Actor, type Gesture } from "./actor";
 import { buildTown, type Town } from "./buildings";
 import { FollowCamera } from "./camera";
-import { Obstacles } from "./collide";
+import { Obstacles, type Circle } from "./collide";
 import { buildCreature, type Creature } from "./creatures";
 import { segmentsToElement } from "./dom";
 import { Effects } from "./fx";
@@ -55,6 +55,8 @@ export type EngineEvents = {
     onAct: (target: Interactable) => void;
     /** a creature caught the hero */
     onContact: (enemyId: string) => void;
+    /** the hero has walked up to where a goal sent them */
+    onReach: (goalId: string) => void;
     onWord: (entryId: number) => void;
     onStick: (stick: { originX: number; originY: number; x: number; y: number } | null) => void;
 };
@@ -76,11 +78,15 @@ export type EngineReport = {
     enemies: { id: string; name: string; tier: string; x: number; z: number; distance: number; state: string }[];
     landmarks: { id: string; name: string; kind: string; x: number; z: number; distance: number }[];
     gates: { id: string; label: string; x: number; z: number; distance: number }[];
+    /** the place a goal has sent the hero to, when it is in this region */
+    beacon: { goalId: string; name: string; x: number; z: number; distance: number; reached: boolean } | null;
 };
 
 type CharacterEntity = {
     data: SceneCharacter;
     actor: Actor;
+    /** the ground they take up, so that it can be given back if they leave */
+    footing: Circle;
     facing: number;
     homeFacing: number;
     nextBark: number;
@@ -188,6 +194,11 @@ export class WorldEngine {
     private landmarks = new Map<string, LandmarkEntity>();
     private gates = new Map<string, GateEntity>();
     private animated: ((time: number) => void)[] = [];
+    /** where a goal has sent the hero; kept across regions, shown in the one it belongs to */
+    private beacon: Beacon | null = null;
+    private beaconLight: { group: THREE.Group; animate: (time: number) => void } | null = null;
+    /** the goal whose place has been reached, so that arriving is told once */
+    private reached: string | null = null;
     private glowing: { at: THREE.Vector3; color: number; strength: number }[] = [];
 
     private mode: EngineMode = "explore";
@@ -356,6 +367,8 @@ export class WorldEngine {
         this.world.add(this.hero.group);
         this.teleport(payload.hero.x, payload.hero.z, payload.hero.rot);
 
+        this.raiseBeacon();
+
         this.setMode("explore");
         this.ready = true;
         this.start();
@@ -410,12 +423,18 @@ export class WorldEngine {
             });
         }
         this.landmarks.set(data.id, { data, prop });
+        this.labelLandmark(data, prop);
+    }
+
+    private labelLandmark(data: SceneLandmark, prop: Prop): void {
         this.labels.add({
             id: `landmark:${data.id}`,
             kind: "landmark",
             title: data.name,
             word: data.label ? { entryId: data.label.entryId, text: data.label.text, hint: data.label.hint } : undefined,
-            range: 17,
+            sought: data.sought,
+            // what a goal points at is seen from further off
+            range: data.sought ? 34 : 17,
         }, prop.object, prop.labelHeight);
     }
 
@@ -431,7 +450,13 @@ export class WorldEngine {
         }
         if (prop.animate) this.animated.push(prop.animate);
         this.gates.set(data.id, { data, prop });
-        this.labels.add({ id: `gate:${data.id}`, kind: "gate", title: data.label, range: 30 }, prop.object, prop.labelHeight);
+        this.labelGate(data, prop);
+    }
+
+    private labelGate(data: SceneGate, prop: Prop): void {
+        this.labels.add({
+            id: `gate:${data.id}`, kind: "gate", title: data.label, sought: data.sought, range: data.sought ? 60 : 30,
+        }, prop.object, prop.labelHeight);
     }
 
     private addCharacter(data: SceneCharacter): void {
@@ -441,9 +466,10 @@ export class WorldEngine {
         actor.group.rotation.y = data.rot;
         actor.group.name = `character:${data.id}`;
         this.world.add(actor.group);
-        this.obstacles.addCircle({ x: data.x, z: data.z, r: 0.5 });
+        const footing = { x: data.x, z: data.z, r: 0.5 };
+        this.obstacles.addCircle(footing);
         this.characters.set(data.id, {
-            data, actor, facing: data.rot, homeFacing: data.rot,
+            data, actor, footing, facing: data.rot, homeFacing: data.rot,
             nextBark: 4 + (Math.abs(seed) % 9), barkIndex: Math.abs(seed) % Math.max(1, data.barks.length),
         });
         this.labelCharacter(data, actor);
@@ -456,8 +482,24 @@ export class WorldEngine {
             title: data.met ? data.name : data.role,
             subtitle: data.met ? data.role : undefined,
             sought: data.sought,
-            range: 20,
+            range: data.sought ? 34 : 20,
         }, actor.group, actor.height + 0.25);
+    }
+
+    /** someone has left this place: for another, or for good */
+    private removeCharacter(id: string): void {
+        const entity = this.characters.get(id);
+        if (!entity) return;
+        this.labels.remove(`character:${id}`);
+        this.labels.remove(`bark:${id}`);
+        this.obstacles.removeCircle(entity.footing);
+        this.world.remove(entity.actor.group);
+        entity.actor.dispose();
+        this.characters.delete(id);
+        if (this.nearest?.kind === "character" && this.nearest.id === id) {
+            this.nearest = null;
+            this.events.onNearest(null);
+        }
     }
 
     private addEnemy(data: SceneEnemy): void {
@@ -468,16 +510,21 @@ export class WorldEngine {
             data, creature,
             home: { x: data.x, z: data.z }, x: data.x, z: data.z,
             facing: Math.random() * Math.PI * 2,
-            state: "idle", goal: { x: data.x, z: data.z },
-            timer: 1 + Math.random() * 3, pace: 0,
+            // a creature takes a moment to notice anyone: the hero is not set upon the instant a place is entered
+            state: "calm", goal: { x: data.x, z: data.z },
+            timer: 5 + Math.random() * 3, pace: 0,
         });
+        this.labelEnemy(data, creature);
+    }
+
+    private labelEnemy(data: SceneEnemy, creature: Creature): void {
         this.labels.add({
             id: `enemy:${data.id}`,
             kind: "enemy",
             title: data.name,
             subtitle: data.tier === "boss" ? "Boss" : data.tier === "elite" ? "Elite" : undefined,
             sought: data.sought,
-            range: 24,
+            range: data.sought ? 40 : 24,
         }, creature.group, creature.height / creature.group.scale.y + 0.3);
     }
 
@@ -493,6 +540,7 @@ export class WorldEngine {
         this.gates.clear();
         this.animated = [];
         this.glowing = [];
+        this.beaconLight = null;
         this.air?.dispose();
         this.air = null;
         this.town = null;
@@ -710,22 +758,115 @@ export class WorldEngine {
         character.actor.play("talk", Math.min(seconds, 2.4));
     }
 
-    /** the scene changed without travel: someone was met, a quest now points elsewhere */
-    refresh(update: { characters?: SceneCharacter[]; enemies?: SceneEnemy[]; landmarks?: SceneLandmark[] }): void {
-        for (const data of update.characters ?? []) {
-            const entity = this.characters.get(data.id);
-            if (!entity) continue;
-            entity.data = data;
-            this.labelCharacter(data, entity.actor);
+    /**
+     * The scene changed without travel: a goal now points elsewhere, someone
+     * has stepped into the story or left it, a creature has come back. What is
+     * given is the whole of each list: whoever is not in it is no longer here.
+     */
+    refresh(update: { characters?: SceneCharacter[]; enemies?: SceneEnemy[]; landmarks?: SceneLandmark[]; gates?: SceneGate[] }): void {
+        if (update.characters) {
+            const here = new Set(update.characters.map((data) => data.id));
+            for (const id of [...this.characters.keys()]) if (!here.has(id)) this.removeCharacter(id);
+            for (const data of update.characters) {
+                const entity = this.characters.get(data.id);
+                if (!entity) {
+                    this.addCharacter(data);
+                    // they arrive in a little light, so that a newcomer is noticed
+                    this.fx.fountain(new THREE.Vector3(data.x, this.groundAt(data.x, data.z), data.z), 0xc9a7ff, 1.6);
+                } else if (Math.hypot(entity.data.x - data.x, entity.data.z - data.z) > 0.5) {
+                    // moved within the region: simplest to let them leave and come again
+                    this.removeCharacter(data.id);
+                    this.addCharacter(data);
+                } else {
+                    entity.data = data;
+                    this.labelCharacter(data, entity.actor);
+                }
+            }
         }
-        for (const data of update.enemies ?? []) {
-            const entity = this.enemies.get(data.id);
-            if (entity) entity.data = data;
+        if (update.enemies) {
+            const here = new Set(update.enemies.map((data) => data.id));
+            for (const [id, entity] of [...this.enemies]) {
+                // one that is falling is on its way out by itself
+                if (here.has(id) || entity.state === "falling") continue;
+                this.labels.remove(`enemy:${id}`);
+                this.world.remove(entity.creature.group);
+                entity.creature.dispose();
+                this.enemies.delete(id);
+            }
+            for (const data of update.enemies) {
+                const entity = this.enemies.get(data.id);
+                if (!entity) this.addEnemy(data);
+                else if (entity.state !== "falling") {
+                    const marked = entity.data.sought !== data.sought;
+                    entity.data = data;
+                    if (marked) this.labelEnemy(data, entity.creature);
+                }
+            }
         }
         for (const data of update.landmarks ?? []) {
             const entity = this.landmarks.get(data.id);
-            if (entity) entity.data = data;
+            if (!entity) continue;
+            const marked = entity.data.sought !== data.sought;
+            entity.data = data;
+            if (marked) this.labelLandmark(data, entity.prop);
         }
+        for (const data of update.gates ?? []) {
+            const entity = this.gates.get(data.id);
+            if (!entity) continue;
+            const marked = entity.data.sought !== data.sought;
+            entity.data = data;
+            if (marked) this.labelGate(data, entity.prop);
+        }
+    }
+
+    /**
+     * Mark the place a goal has sent the hero to with a column of light, or
+     * take the mark away (null). It is shown only in the region it belongs to,
+     * and the engine tells when the hero has walked up to it.
+     */
+    setBeacon(beacon: Beacon | null): void {
+        this.beacon = beacon;
+        this.reached = null;
+        if (this.ready) this.raiseBeacon();
+    }
+
+    private raiseBeacon(): void {
+        if (this.beaconLight) {
+            const old = this.beaconLight;
+            this.animated = this.animated.filter((animate) => animate !== old.animate);
+            this.labels.remove("beacon");
+            this.world.remove(old.group);
+            disposeObject(old.group);
+            this.beaconLight = null;
+        }
+        const beacon = this.beacon;
+        if (!beacon || beacon.regionId !== this.payload?.region.id) return;
+
+        const glow = (opacity: number) => new THREE.MeshBasicMaterial({
+            color: 0xffd36a, transparent: true, opacity, blending: THREE.AdditiveBlending,
+            depthWrite: false, toneMapped: false, side: THREE.DoubleSide, fog: false,
+        });
+        const group = new THREE.Group();
+        group.name = "beacon";
+        const column = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 1.1, 26, 16, 1, true), glow(0.2));
+        column.position.y = 13;
+        const ring = new THREE.Mesh(new THREE.RingGeometry(beacon.radius * 0.5 - 0.22, beacon.radius * 0.5, 40), glow(0.75));
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.12;
+        group.add(column, ring);
+        group.position.set(beacon.x, this.groundAt(beacon.x, beacon.z), beacon.z);
+
+        const animate = (time: number) => {
+            const beat = 0.5 + 0.5 * Math.sin(time * 2.2);
+            (column.material as THREE.MeshBasicMaterial).opacity = 0.14 + beat * 0.12;
+            column.rotation.y = time * 0.4;
+            ring.scale.setScalar(0.85 + beat * 0.3);
+            (ring.material as THREE.MeshBasicMaterial).opacity = 0.85 - beat * 0.45;
+        };
+        this.world.add(group);
+        this.animated.push(animate);
+        this.beaconLight = { group, animate };
+        this.labels.add({ id: "beacon", kind: "landmark", title: beacon.name, sought: true, range: 90 }, group, 3.2);
     }
 
     teleport(x: number, z: number, rot?: number): void {
@@ -774,6 +915,18 @@ export class WorldEngine {
             };
             check();
         });
+    }
+
+    /**
+     * Walk to whatever is marked in this region — whom the goal in hand names,
+     * what it points at, the gate it lies through — and act on it.
+     */
+    walkToSought(): Promise<boolean> {
+        for (const c of this.characters.values()) if (c.data.sought) return this.walkTo({ kind: "character", id: c.data.id }, true);
+        for (const e of this.enemies.values()) if (e.data.sought && e.state !== "falling") return this.walkTo({ kind: "enemy", id: e.data.id }, true);
+        for (const l of this.landmarks.values()) if (l.data.sought) return this.walkTo({ kind: "landmark", id: l.data.id }, true);
+        for (const g of this.gates.values()) if (g.data.sought) return this.walkTo({ kind: "gate", id: g.data.id }, true);
+        return Promise.resolve(false);
     }
 
     /** plan a walk; false when there is no way there */
@@ -1161,6 +1314,13 @@ export class WorldEngine {
     private scan(): void {
         if (this.mode !== "explore") return;
         const here = this.heroSpot2d();
+
+        const beacon = this.beacon;
+        if (beacon && this.beaconLight && this.reached !== beacon.goalId
+            && Math.hypot(beacon.x - here.x, beacon.z - here.z) <= beacon.radius) {
+            this.reached = beacon.goalId;
+            this.events.onReach(beacon.goalId);
+        }
         let best: Interactable | null = null;
         let bestGap = Infinity;
 
@@ -1359,6 +1519,9 @@ export class WorldEngine {
             enemies: [...this.enemies.values()].map((e) => ({ id: e.data.id, name: e.data.name, tier: e.data.tier, x: round(e.x), z: round(e.z), distance: gapTo(e.x, e.z), state: e.state })),
             landmarks: [...this.landmarks.values()].map((l) => ({ id: l.data.id, name: l.data.name, kind: l.data.kind, x: round(l.data.x), z: round(l.data.z), distance: gapTo(l.data.x, l.data.z) })),
             gates: [...this.gates.values()].map((g) => ({ id: g.data.id, label: g.data.label, x: round(g.data.x), z: round(g.data.z), distance: gapTo(g.data.x, g.data.z) })),
+            beacon: this.beacon && this.beaconLight
+                ? { goalId: this.beacon.goalId, name: this.beacon.name, x: round(this.beacon.x), z: round(this.beacon.z), distance: gapTo(this.beacon.x, this.beacon.z), reached: this.reached === this.beacon.goalId }
+                : null,
         };
     }
 

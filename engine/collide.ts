@@ -32,6 +32,14 @@ export class Obstacles {
         }
     }
 
+    /** take away a circle that was added: whoever stood there has left */
+    removeCircle(circle: Circle): void {
+        for (const bucket of this.circles.values()) {
+            const at = bucket.indexOf(circle);
+            if (at >= 0) bucket.splice(at, 1);
+        }
+    }
+
     addRect(rect: Rect): void {
         this.rects.push(rect);
     }

@@ -8,7 +8,6 @@ import type { AnswerResult } from "@/game/payloads";
 import { Button } from "@/components/ui/Button";
 import { Hearts, Meter } from "@/components/ui/Panel";
 import { ChallengeView } from "@/components/learn/ChallengeView";
-import { StoryText } from "@/components/words/StoryText";
 import { openWordAtom } from "@/components/words/store";
 import { bookAtom, encounterAtom, modeAtom } from "./state";
 import { useGame } from "./useGame";
@@ -91,6 +90,11 @@ export function BattlePanel() {
                             {battle.enemy.description && <p className="text-ink-soft">{battle.enemy.description}</p>}
                             <p className="prose-story italic">“{battle.introLine}”</p>
                             <p className="font-hand text-xl text-ink-soft">answer its challenges to cast your spells</p>
+                            {battle.atStake && (
+                                <p className="text-sm text-ink-soft max-w-md justify-self-center">
+                                    The story turns on this: <span className="text-ink font-semibold">{battle.atStake}</span>. If you are driven back, the story will find another way — and you may back away first, to come again.
+                                </p>
+                            )}
                             <Button variant="primary" size="lg" className="justify-self-center" onClick={() => setBegun(battle.id)}>Stand your ground</Button>
                         </div>
                     ) : result ? (
@@ -148,13 +152,15 @@ function Verdict({ result, onNext }: { result: AnswerResult; onNext: () => void 
             {result.victory && (
                 <div className="grid gap-3 border-t border-wood/20 pt-3">
                     <p className="prose-story italic">“{result.victory.defeatLine}”</p>
-                    {result.victory.passage && (
-                        <p className="prose-story text-left">
-                            <StoryText segments={result.victory.passage.segments} gloss="below" />
-                        </p>
-                    )}
                     <WordChips words={result.victory.learned} label="learned in this battle" />
                 </div>
+            )}
+
+            {result.settled && (
+                <p className="text-ink-soft leading-snug">
+                    <span className={`font-display text-lg text-ink ${result.settled.status === "failed" ? "line-through decoration-rose/60" : ""}`}>{result.settled.title}</span>
+                    {result.settled.status === "failed" && <span className="block font-hand text-lg">It did not come off. The story will find another way.</span>}
+                </p>
             )}
 
             {result.xp > 0 && <p className="font-hand text-xl text-gold">+{result.xp} xp</p>}

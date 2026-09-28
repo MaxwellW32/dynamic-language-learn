@@ -5,13 +5,29 @@ item names it. They are ordered by how much they matter before other people are 
 
 ## 1. Before anyone else plays
 
-- **Choose a payment processor and run a real payment.** The wallet, the ledger, the packages
-  (pay $6 → $5 credit) and exactly-once crediting are built and tested. `server/payments/stripe.ts`
-  implements Stripe Checkout and its webhook but **has never run against Stripe**: there were no
-  keys. If Stripe is not available to the business, write a second provider beside it
-  (`server/payments/index.ts` is the interface: `startCheckout`, `readWebhook`) — everything
-  downstream of `completeTopup` stays as it is. Until a provider is configured, `/wallet` shows the
-  packages with their buttons disabled.
+- **Run a real payment on PowerTranz staging.** The whole road is built and passes against the
+  test gateway, but has never met PowerTranz itself. With staging credentials: make a hosted page
+  in the merchant portal, set the variables in the README, pay once, and confirm the four things
+  listed at the top of `server/payments/powertranz.ts` (expiry format, the shape of
+  `/spi/payment`, the 3-D Secure field, the production host). Then refund it with
+  `scripts/refundTopup.ts`.
+- **What the bank will ask for before it lets you go live**: terms of service, a privacy policy,
+  a refund policy and a way to reach you, all on the site. None of these pages exist yet, and
+  what they say is a business decision (is unspent credit refundable? does credit expire?).
+- **The app stores.** A web view wrapped as an app may not sell credit by card: Apple and Google
+  require their own in-app purchase for digital goods, at 15–30%. In order of effort:
+  1. *Web first.* Launch as a website (and an installable PWA). No store, no commission.
+  2. *An app that does not sell.* The wrapped app shows the balance and plays the game; credit is
+     bought on the website. The app must hide the "Pay" buttons and may not point to them (add a
+     `?shell=app` flag that `WalletScreen` reads). Google Play allows such "consumption-only"
+     apps. Apple is stricter with games: credit bought elsewhere may be used in the app only if
+     it is also sold there by in-app purchase, so expect iOS to need the third way. The rules on
+     linking out have been changing since 2025, above all in the United States: read both
+     stores' current payment policies before building.
+  3. *In-app purchase.* Sell the same packages through the stores (RevenueCat is the usual way),
+     crediting the same wallet through `completeTopup` with a new provider. The packages must be
+     repriced for the app: at 30%, a $6 pouch leaves $4.20, less than the $5 it credits.
+  Bring-your-own-key needs none of this: nothing is sold.
 - **Rate limits.** Spending is self-limiting for wallet players (they pay), but the starter gift
   ($0.50 per new account) can be farmed, and speech transcription accepts uploads. Add a per-user
   limit on model calls per minute and per day in `server/ai/client.ts` (`openDoor` is where every

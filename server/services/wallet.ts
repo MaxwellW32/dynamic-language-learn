@@ -1,5 +1,6 @@
 import "server-only";
-import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { randomBytes, randomUUID } from "crypto";
+import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { aiUsage, creditLedger, topups, users, type Topup } from "@/db/schema";
 import type { WalletView } from "@/game/payloads";
@@ -166,8 +167,14 @@ export async function usageSummary(userId: string, days = 30) {
     };
 }
 
-/** a pending purchase, recorded before the player is sent to pay */
-export async function createTopup(userId: string, packageKey: string, providerKey: string): Promise<Topup> {
+/**
+ * A pending purchase, recorded before the player is sent to pay. `price` is
+ * what the card will be charged, which is the package's price in US cents
+ * unless the merchant account takes another currency.
+ */
+export async function createTopup(
+    userId: string, packageKey: string, providerKey: string, price?: { currency: string; minor: number },
+): Promise<Topup> {
     const pkg = findPackage(packageKey);
     if (!pkg) throw new Error("That package does not exist.");
     const [row] = await db.insert(topups).values({
@@ -176,8 +183,71 @@ export async function createTopup(userId: string, packageKey: string, providerKe
         paidCents: pkg.paidCents,
         creditMicros: pkg.creditMicros,
         provider: providerKey,
+        transactionId: randomUUID(),
+        chargedMinor: price?.minor ?? pkg.paidCents,
+        chargedCurrency: price?.currency ?? "USD",
     }).returning();
     return row;
+}
+
+/**
+ * How many times this player has set out to pay in the last hour and not
+ * paid. Someone trying out stolen card numbers fails over and over; someone
+ * who pays is not held back for having paid.
+ */
+export async function recentAttempts(userId: string): Promise<number> {
+    const [row] = await db.select({ n: sql<number>`count(*)::int` }).from(topups)
+        .where(and(
+            eq(topups.userId, userId),
+            inArray(topups.status, ["pending", "failed"]),
+            gte(topups.createdAt, new Date(Date.now() - 60 * 60 * 1000)),
+        ));
+    return row?.n ?? 0;
+}
+
+/** how long the page that leads to the bank may wait to be opened */
+const HANDOFF_MINUTES = 15;
+
+/**
+ * Keep the gateway's page with the top-up until the browser asks for it. It
+ * is kept in the database and not in memory because the request that asks may
+ * be answered by another server than the one that was given the page.
+ */
+export async function parkHandoff(topupId: string, html: string): Promise<string> {
+    const key = randomBytes(24).toString("base64url");
+    await db.update(topups).set({ handoff: html, handoffKey: key }).where(eq(topups.id, topupId));
+    return key;
+}
+
+/** the page, once: whoever asks a second time, or too late, or without the key, gets nothing */
+export async function takeHandoff(topupId: string, key: string, providerKey: string): Promise<string | null> {
+    if (key.length < 16) return null;
+    // one statement reads the page and clears it, so two requests at once cannot both be served
+    const result = await db.execute<{ handoff: string | null }>(sql`
+        update topups t set handoff = null, "handoffKey" = null
+        from (
+            select id, handoff from topups
+            where id = ${topupId} and "handoffKey" = ${key} and provider = ${providerKey} and status = 'pending'
+              and handoff is not null
+              and "createdAt" > now() - ${`${HANDOFF_MINUTES} minutes`}::interval
+            for update
+        ) held
+        where t.id = held.id
+        returning held.handoff`);
+    return result.rows[0]?.handoff ?? null;
+}
+
+/** a payment did not happen. Only a top-up still waiting can fail: one that has been paid stays paid */
+export async function failTopup(topupId: string, message: string): Promise<void> {
+    await db.update(topups)
+        .set({ status: "failed", message: message.slice(0, 300), handoff: null, handoffKey: null })
+        .where(and(eq(topups.id, topupId), eq(topups.status, "pending")));
+}
+
+/** the player's own top-up, to tell them what came of it */
+export async function topupOf(userId: string, topupId: string): Promise<Topup | null> {
+    const row = await db.query.topups.findFirst({ where: and(eq(topups.id, topupId), eq(topups.userId, userId)) });
+    return row ?? null;
 }
 
 /**
@@ -188,23 +258,50 @@ export async function createTopup(userId: string, packageKey: string, providerKe
  */
 export async function completeTopup(input: {
     topupId: string; provider: string; providerRef: string;
+    /** what the gateway said of the card: its brand and last four digits, never more */
+    card?: { brand: string | null; last4: string | null; authCode: string | null };
 }): Promise<{ credited: boolean; balanceMicros: number }> {
     return db.transaction(async (tx) => {
-        // FOR UPDATE: two deliveries of the same webhook queue here instead of racing
+        // FOR UPDATE: two returns from the bank for the same payment queue here instead of racing
         const [topup] = await tx.select().from(topups).where(eq(topups.id, input.topupId)).for("update");
         if (!topup) throw new TopupError(`Topup ${input.topupId} does not exist.`);
         if (topup.provider !== input.provider) {
             throw new TopupError(`Topup ${input.topupId} belongs to provider "${topup.provider}", not "${input.provider}".`);
         }
-        if (topup.status !== "pending" && topup.status !== "paid") {
+        // "failed" may still be paid: it was marked so when a first answer could not be had, and the gateway has now said yes
+        if (topup.status === "refunded") {
             throw new TopupError(`Topup ${input.topupId} is ${topup.status} and cannot be completed.`);
         }
-        if (topup.status === "pending") {
+        if (topup.status !== "paid") {
             await tx.update(topups)
-                .set({ status: "paid", providerRef: topup.providerRef ?? input.providerRef, paidAt: new Date() })
+                .set({
+                    status: "paid", providerRef: topup.providerRef ?? input.providerRef, paidAt: new Date(),
+                    message: null, handoff: null, handoffKey: null,
+                    cardBrand: input.card?.brand?.slice(0, 40) ?? null,
+                    cardLast4: input.card?.last4 ?? null,
+                    authCode: input.card?.authCode?.slice(0, 40) ?? null,
+                })
                 .where(eq(topups.id, topup.id));
         }
         const result = await applyDelta(tx, topup.userId, topup.creditMicros, "topup", topup.id);
         return { credited: result.applied, balanceMicros: result.balanceMicros };
+    });
+}
+
+/**
+ * The payment has been given back by the gateway: the credit it bought leaves
+ * the wallet, once. If some of it has been spent the balance goes below zero,
+ * and the storyteller waits until it is made up — the player has their money.
+ */
+export async function markRefunded(topupId: string): Promise<{ reversed: boolean; balanceMicros: number }> {
+    return db.transaction(async (tx) => {
+        const [topup] = await tx.select().from(topups).where(eq(topups.id, topupId)).for("update");
+        if (!topup) throw new TopupError(`Topup ${topupId} does not exist.`);
+        if (topup.status !== "paid" && topup.status !== "refunded") {
+            throw new TopupError(`Topup ${topupId} is ${topup.status}: there is nothing to give back.`);
+        }
+        if (topup.status === "paid") await tx.update(topups).set({ status: "refunded" }).where(eq(topups.id, topup.id));
+        const result = await applyDelta(tx, topup.userId, -topup.creditMicros, "refund", topup.id);
+        return { reversed: result.applied, balanceMicros: result.balanceMicros };
     });
 }

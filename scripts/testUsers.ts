@@ -6,9 +6,9 @@
  *   npx tsx scripts/testUsers.ts status   show what exists
  *   npx tsx scripts/testUsers.ts books    list the player's books (ids for /book/<id>)
  */
-import { desc, eq, inArray, like, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, like, sql } from "drizzle-orm";
 import { db } from "../db";
-import { aiUsage, books, creditLedger, sessions, users } from "../db/schema";
+import { aiUsage, books, creditLedger, sessions, topups, users } from "../db/schema";
 import { TEST_EMAIL_DOMAIN, testAccounts } from "../lib/testMode";
 
 /** enough wallet credit for many full test passes; topped back up on every seed */
@@ -40,6 +40,10 @@ async function seed() {
                     billingMode: onboarded ? "credits" : null,
                 },
             }).returning({ id: users.id });
+
+            // payments that were started and never paid: left alone they would count against the next
+            // test run, which is allowed only so many unpaid attempts in an hour
+            await tx.delete(topups).where(and(eq(topups.userId, row.id), inArray(topups.status, ["pending", "failed"])));
 
             if (onboarded) {
                 // locked, so a model call charging at the same moment cannot slip between the read and the write

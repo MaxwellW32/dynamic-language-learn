@@ -7,34 +7,29 @@ import { segmentsToPlainText } from "@/game/segments";
 import { Button } from "@/components/ui/Button";
 import { StoryText } from "@/components/words/StoryText";
 import { speakLine, useSpeaking } from "@/components/words/useSpeech";
-import { bookAtom, busyAtom, chaptersAtom, learnerAtom, modeAtom, readingAtom } from "./state";
+import { bookAtom, chaptersAtom, learnerAtom, modeAtom, queueAtom, readingAtom } from "./state";
 import { useGame } from "./useGame";
 
-const TONE_ICON: Record<string, string> = {
-    bold: "🔥", brave: "🔥", kind: "🌿", gentle: "🌿", curious: "🔎", cautious: "🕯️", wary: "🕯️",
-    playful: "🎈", clever: "🦊", patient: "⏳", honest: "🤝",
-};
-
 /**
- * A page of the book, laid over the world. New pages appear here as they are
- * written; if the page ends at a fork, the ways on are offered beneath it.
+ * A page of the book, laid over the world. New pages appear here as the
+ * storyteller writes them; when several were written at one sitting they are
+ * read one after another.
  */
 export function PassagePanel() {
     const passage = useAtomValue(readingAtom);
+    const queue = useAtomValue(queueAtom);
     const mode = useAtomValue(modeAtom);
     const book = useAtomValue(bookAtom);
     const chapters = useAtomValue(chaptersAtom);
     const learner = useAtomValue(learnerAtom);
-    const busy = useAtomValue(busyAtom);
     const speaking = useSpeaking();
     const game = useGame();
 
     const open = passage !== null && mode === "reading";
-    const fork = passage?.choices && passage.chosenKey === null ? passage.choices : null;
 
-    // Enter or Space turns on, unless the page is waiting for a choice
+    // Enter or Space reads on
     useEffect(() => {
-        if (!open || fork) return;
+        if (!open) return;
         const onKey = (event: KeyboardEvent) => {
             const typing = (event.target as HTMLElement | null)?.tagName === "INPUT";
             if (!typing && (event.key === "Enter" || event.key === " " || event.key === "Escape")) {
@@ -44,7 +39,7 @@ export function PassagePanel() {
         };
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
-    }, [open, fork, game]);
+    }, [open, game]);
 
     if (!open || !passage || !book) return null;
 
@@ -54,10 +49,10 @@ export function PassagePanel() {
 
     return (
         <section className="absolute inset-x-0 bottom-0 z-30 px-3 pb-3 sm:pb-6 flex justify-center pointer-events-none" aria-live="polite">
-            <div className="page-float pointer-events-auto w-full max-w-3xl max-h-[62dvh] overflow-y-auto scroll-ink px-5 sm:px-8 py-5 animate-rise">
+            <div key={passage.id} className="page-float pointer-events-auto w-full max-w-3xl max-h-[62dvh] overflow-y-auto scroll-ink px-5 sm:px-8 py-5 animate-rise">
                 <div className="flex items-baseline justify-between gap-3 mb-1">
                     <span className="font-hand text-xl text-ember-deep">
-                        {passage.kind === "discovery" ? "a discovery" : passage.kind === "event" ? "the story moves" : chapter ? `chapter ${chapter.index} · ${chapter.title}` : "the story"}
+                        {passage.kind === "discovery" ? "a discovery" : chapter ? `chapter ${chapter.index} · ${chapter.title}` : "the story"}
                     </span>
                     <button
                         type="button"
@@ -74,31 +69,14 @@ export function PassagePanel() {
                     <StoryText segments={passage.segments} gloss={(learner?.immersion ?? 0) >= 3 ? "peek" : "below"} />
                 </p>
 
-                {fork ? (
-                    <div className="mt-4 grid gap-2">
-                        <p className="font-hand text-xl text-ink-soft">what do you do?</p>
-                        {fork.map((choice) => (
-                            <button
-                                key={choice.key}
-                                type="button"
-                                disabled={busy !== null}
-                                onClick={() => void game.choose(passage.id, choice.key)}
-                                className="text-left rounded-md border-2 border-wood/30 bg-parchment-deep/70 hover:border-ember/70 hover:bg-parchment-deep px-4 py-2.5 text-lg cursor-pointer transition-colors disabled:opacity-60 disabled:cursor-wait"
-                            >
-                                <span className="mr-2" aria-hidden>{TONE_ICON[choice.tone.toLowerCase()] ?? "➳"}</span>
-                                <StoryText segments={choice.label} />
-                                <span className="ml-2 text-sm text-ink-faint italic">{choice.tone}</span>
-                            </button>
-                        ))}
-                        <button type="button" onClick={game.closeReading} className="justify-self-end text-sm text-ink-faint underline underline-offset-2 cursor-pointer hover:text-ink">
-                            decide later
-                        </button>
-                    </div>
-                ) : (
-                    <div className="mt-4 flex justify-end">
-                        <Button variant="primary" onClick={game.closeReading}>Go on</Button>
-                    </div>
-                )}
+                <div className="mt-4 flex items-center justify-end gap-3">
+                    {queue.length > 0 && (
+                        <span className="font-hand text-lg text-ink-soft">
+                            {queue.length === 1 ? "one more page" : `${queue.length} more pages`}
+                        </span>
+                    )}
+                    <Button variant="primary" onClick={game.closeReading}>{queue.length > 0 ? "Read on" : "Go on"}</Button>
+                </div>
             </div>
         </section>
     );

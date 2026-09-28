@@ -16,6 +16,7 @@ export function WorldPreview({ scene, quality }: { scene: ScenePayload; quality:
         onNearest: setNearest,
         onAct: (target) => note(`act: ${target.verb} ${target.name}`),
         onContact: (id) => note(`caught by ${id}`),
+        onReach: (id) => note(`reached ${id}`),
         onWord: (id) => note(`word ${id}`),
         onStick: () => { },
     }), [note]);

@@ -77,11 +77,13 @@ export function mockScene(options: {
             x: slot.x, z: slot.z, rot: slot.rot,
             label: null,
             examined: false,
+            sought: i === 1,
         })),
         gates: openSides.map((side, i) => ({
             id: `g${i}`, side,
             x: layout.gates[side].x, z: layout.gates[side].z, rot: layout.gates[side].rot,
             label: "To the road beyond",
+            sought: i === 0,
         })),
         characters: layout.npcSlots.slice(0, 7).map((slot, i) => ({
             id: `c${i}`,

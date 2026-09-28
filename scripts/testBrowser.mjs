@@ -65,8 +65,12 @@ function keyInfo(code) {
     throw new Error(`Unknown key code: ${code}`);
 }
 
-export async function openBrowser({ role = "public", width = 1280, height = 800, baseUrl = "http://localhost:3011", software = false } = {}) {
+//`scale` is how many device pixels make one CSS pixel: a phone has 2 or 3, a Windows laptop is usually set to
+//125% or 150%. Anything that sizes a canvas must be checked at a scale that is not 1 - at 1 a canvas is by chance
+//the same size in both kinds of pixel, and a missing CSS size goes unseen.
+export async function openBrowser({ role = "public", width = 1280, height = 800, baseUrl = "http://localhost:3011", software = false, scale } = {}) {
     const isMobile = width < 900;
+    const deviceScaleFactor = scale ?? (isMobile ? 2 : 1);
     const port = 9400 + Math.floor(Math.random() * 500);
     const profile = path.join(os.tmpdir(), `wb-test-profile-${port}`);
     //the game is WebGL: use the real GPU when there is one, or Chrome's software renderer with { software: true }
@@ -114,7 +118,7 @@ export async function openBrowser({ role = "public", width = 1280, height = 800,
     await send("Page.enable");
     await send("Runtime.enable");
     await send("Network.enable");
-    await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: isMobile ? 2 : 1, mobile: isMobile });
+    await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor, mobile: isMobile });
     if (isMobile) {
         await send("Emulation.setTouchEmulationEnabled", { enabled: true });
         await send("Emulation.setUserAgentOverride", { userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1" });
@@ -251,7 +255,7 @@ export async function openBrowser({ role = "public", width = 1280, height = 800,
             }
             const capture = await send("Page.captureScreenshot", { format: "png" });
             writeFileSync(file, Buffer.from(capture.result.data, "base64"));
-            if (full) await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: isMobile ? 2 : 1, mobile: isMobile });
+            if (full) await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor, mobile: isMobile });
             return file;
         },
 

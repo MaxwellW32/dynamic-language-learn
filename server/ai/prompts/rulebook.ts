@@ -1,6 +1,6 @@
 import "server-only";
 import { languageOf } from "@/game/languages";
-import type { Book, Character, Region } from "@/db/schema";
+import type { Book, Chapter, Character, Region } from "@/db/schema";
 
 /**
  * The stable head of every prompt.
@@ -11,8 +11,8 @@ import type { Book, Character, Region } from "@/db/schema";
  * changes:
  *
  *   1. RULEBOOK  — identical for every book and every player
- *   2. the bible — changes only when a chapter turns
- *   3. a character sheet — changes only when the director gives them a new goal
+ *   2. the bible — changes only when a chapter turns, or someone new enters the story
+ *   3. the outline (for the storyteller) or a character sheet (for a person) — never changes
  *
  * Nothing that varies per turn — immersion level, memories, the scene, the
  * offered words — may appear above the line these three draw. Put it in
@@ -92,7 +92,7 @@ export function bibleOf(book: Book, regions: Region[], cast: Character[]): strin
         .join("\n");
     const people = [...cast]
         .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
-        .map((c, i) => `- n${i + 1}: ${c.name}, ${c.role}`)
+        .map((c, i) => `- n${i + 1}: ${c.name}, ${c.role}${c.status !== "alive" ? " (has left the story)" : c.onstage ? "" : " (not yet in the story: nobody has met them)"}`)
         .join("\n");
 
     return `# The book
@@ -121,7 +121,29 @@ export function castKeys(cast: Character[]): Map<string, Character> {
     return new Map(ordered.map((c, i) => [`n${i + 1}`, c]));
 }
 
+/**
+ * The whole book in outline, for the storyteller and for whoever plans its
+ * goals. It is written once, when the book is made, and never changes, so it
+ * sits in the cached head of the prompt. No character is ever shown it: they
+ * do not know what lies ahead.
+ */
+export function outlineOf(chapters: Pick<Chapter, "index" | "title" | "stage" | "description">[]): string {
+    const lines = [...chapters]
+        .sort((a, b) => a.index - b.index)
+        .filter((chapter) => chapter.description.trim().length > 0)
+        .map((chapter) => `${chapter.index}. "${chapter.title}" (${ARC_NAMES[chapter.stage].split(" — ")[0]}): ${chapter.description.trim()}`);
+    return `# The shape of the whole book
+
+Where each chapter ends is fixed; how the hero gets there is theirs to decide. The reader does not know what lies ahead: never reveal it, though it may cast its shadow.
+
+${lines.join("\n") || "(not yet outlined)"}`;
+}
+
 export function characterSheet(character: Character): string {
+    const tastes = [
+        character.likes.length > 0 ? `What warms you to someone: ${character.likes.join("; ")}` : "",
+        character.dislikes.length > 0 ? `What puts you off: ${character.dislikes.join("; ")}` : "",
+    ].filter(Boolean).join("\n");
     return `# You
 
 In this request you are ${character.name}, speaking as yourself. You are a person in this world, not a narrator and not an assistant.
@@ -131,7 +153,7 @@ Personality: ${character.personality}
 Appearance: ${character.appearance}
 Your story: ${character.backstory}
 What you will not say until you trust the hero: ${character.secret}
-How you talk: ${character.speechStyle}
+How you talk: ${character.speechStyle}${tastes ? `\n${tastes}` : ""}
 
 How to be a person:
 - React to what the hero actually said. Want things. Tease, hesitate, disagree, change the subject.
@@ -142,5 +164,6 @@ How to be a person:
 - Small actions go in *asterisks* inside text segments, written as a stage direction about you, never as "I" or "my": *wipes her hands on her apron*.
 - Say a thing once. If THE LAST LINES show that you have already said what you want, where you mean to go or what worries you, let it rest: answer what the hero has just said, and come back to your own business only when the talk turns that way.
 - What you write is what you say aloud, and nothing else: no quotation marks around it, and never a storyteller's "I say" or "she smiles" outside the asterisks.
-- Say one to three short beats. People in conversation do not give speeches.`;
+- Say one to three short beats. People in conversation do not give speeches.
+- You have a will of your own. When something is asked of you, what you like draws you toward it and what puts you off pushes you away; being flattered, hurried or pushed makes you dig in. You may be won, and you may say no.`;
 }

@@ -1,25 +1,30 @@
 import "server-only";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { books, encounters, enemies, regions, type Book, type Encounter, type Enemy } from "@/db/schema";
+import { books, encounters, enemies, regions, type Book, type Encounter, type Enemy, type Goal } from "@/db/schema";
 import {
     generateStages, gradeStage, stageCountForTier,
     type ChallengeType, type Submission,
 } from "@/game/challenges";
-import type { AnswerResult, EncounterView, QuestUpdate } from "@/game/payloads";
+import type { AnswerResult, EncounterView, GoalSettled } from "@/game/payloads";
 import { withinInteractRange } from "@/game/worldgen/layout";
-import type { AiContext } from "../ai/client";
-import { cardsFor, cardsForSegments } from "./dictionary";
-import { chronicle, dueForDirection, runDirector } from "./director";
+import { chronicle } from "./chronicle";
+import { cardsFor } from "./dictionary";
+import { goalInHand, settle, storyState } from "./goals";
 import { addXp, distractorsFor, planWords, recordAnswer, toChallengeWord } from "./learning";
-import { langOf, narrateVictory, questBeat } from "./narration";
-import { applyProgress, isChapterTurnReady } from "./quests";
+import { langOf } from "./narration";
 
 export const MAX_HEARTS = 3;
 const XP_PER_ANSWER = 10;
 const XP_FOR_VICTORY: Record<Enemy["tier"], number> = { minion: 20, elite: 45, boss: 150 };
 
-function view(encounter: Encounter, enemy: Enemy): EncounterView {
+/** the goal in hand, if it is to best this creature */
+async function fightFor(bookId: string, enemyId: string): Promise<Goal | null> {
+    const goal = await goalInHand(bookId);
+    return goal && goal.kind === "fight" && goal.targetEnemyId === enemyId ? goal : null;
+}
+
+function view(encounter: Encounter, enemy: Enemy, atStake: string | null): EncounterView {
     const stage = encounter.status === "active" ? encounter.stages[encounter.stageIndex] ?? null : null;
     return {
         id: encounter.id,
@@ -32,6 +37,7 @@ function view(encounter: Encounter, enemy: Enemy): EncounterView {
         stage: stage ? stage.client : null,
         // no cards up front: a card for a word about to be asked would be the answer
         words: [],
+        atStake,
     };
 }
 
@@ -40,10 +46,10 @@ export async function getActiveEncounter(book: Pick<Book, "id">): Promise<Encoun
         where: and(eq(encounters.bookId, book.id), eq(encounters.status, "active")),
         with: { enemy: true },
     });
-    return active ? view(active, active.enemy) : null;
+    return active ? view(active, active.enemy, (await fightFor(book.id, active.enemyId))?.title ?? null) : null;
 }
 
-/** the hero backs away mid-battle; the creature stays where it is */
+/** the hero backs away mid-battle; the creature stays where it is, and nothing is lost by it */
 export async function fleeEncounter(book: Pick<Book, "id">, encounterId: string): Promise<void> {
     await db.update(encounters)
         .set({ status: "retreated", endedAt: new Date() })
@@ -90,10 +96,15 @@ export async function startEncounter(book: Book, enemyId: string): Promise<Encou
     const [encounter] = await db.insert(encounters).values({
         bookId: book.id, enemyId: enemy.id, stages, hearts: MAX_HEARTS,
     }).returning();
-    return view(encounter, enemy);
+    return view(encounter, enemy, (await fightFor(book.id, enemy.id))?.title ?? null);
 }
 
+/** what was answered, as kept in the record of attempts; a text column cannot hold a NUL */
 function describeSubmission(submission: Submission): string {
+    return answered(submission).replace(/\u0000/g, "").slice(0, 300);
+}
+
+function answered(submission: Submission): string {
     switch (submission.kind) {
         case "choice":
         case "spelling":
@@ -107,8 +118,12 @@ function describeSubmission(submission: Submission): string {
     }
 }
 
-/** grade one answer on the server; every answer feeds the schedule */
-export async function submitAnswer(ctx: AiContext, book: Book, encounterId: string, submission: Submission): Promise<AnswerResult> {
+/**
+ * Grade one answer on the server; every answer feeds the schedule. When the
+ * battle was the goal in hand, its end settles the goal: won, or lost. Being
+ * driven back is an ending too, and the story goes on from it.
+ */
+export async function submitAnswer(book: Book, encounterId: string, submission: Submission): Promise<AnswerResult> {
     const encounter = await db.query.encounters.findFirst({
         where: eq(encounters.id, encounterId),
         with: { enemy: true },
@@ -144,51 +159,32 @@ export async function submitAnswer(ctx: AiContext, book: Book, encounterId: stri
     }
 
     let xp = grade.correct ? XP_PER_ANSWER : 0;
-    const questUpdates: QuestUpdate[] = learnedIds.length > 0
-        ? await applyProgress(book, { kind: "learnWords", count: learnedIds.length })
-        : [];
-
+    const enemy = encounter.enemy;
     let victory: AnswerResult["victory"] = null;
+    let settled: GoalSettled | null = null;
+
     if (status === "won") {
-        const enemy = encounter.enemy;
         xp += XP_FOR_VICTORY[enemy.tier];
         await db.update(enemies).set({ status: "defeated", defeatedAt: new Date() }).where(eq(enemies.id, enemy.id));
-        questUpdates.push(...await applyProgress(book, { kind: "defeat", enemyId: enemy.id }));
-
-        const region = await db.query.regions.findFirst({ where: eq(regions.id, enemy.regionId) });
-        const resolved = questUpdates.find((u) => u.questCompleted);
-        let passage = null;
-
-        if (region && resolved) {
-            const { written, fresh } = await questBeat(ctx, book, region, resolved,
-                `${book.playerName} bested ${enemy.name} (${enemy.description}) in a battle of words.`);
-            passage = written;
-            questUpdates.push(...fresh);
+        const goal = await fightFor(book.id, enemy.id);
+        if (goal) {
+            settled = await settle(book, goal, "done", `${book.playerName} bested ${enemy.name} in a battle of words.`);
         } else {
             await chronicle(book, {
                 kind: "victory", regionId: enemy.regionId,
                 importance: enemy.tier === "boss" ? 9 : enemy.tier === "elite" ? 5 : 2,
                 summary: `${book.playerName} bested ${enemy.name} in a battle of words.`,
             });
-            // an ordinary creature yields with its own line; only the ones that matter get a page
-            if (region && enemy.tier !== "minion") {
-                passage = await narrateVictory(ctx, book, region,
-                    `The hero has just bested ${enemy.name} (${enemy.description}). It yields, saying: "${enemy.defeatLine}"`);
-            }
-            if (await dueForDirection(book.id)) questUpdates.push(...await runDirector(ctx, book.id));
         }
-
         // every word asked in the battle, first-time ones marked: the victory screen shows what was practised
         const asked = [...new Set(encounter.stages.flatMap((s) => s.wordIds))];
-        const allLearned = await learnedInBattle(book.userId, encounter.id, asked, learnedIds);
         victory = {
             defeatLine: enemy.defeatLine,
-            passage: passage?.passage ?? null,
-            words: passage ? await cardsForSegments([passage.segments]) : [],
-            questUpdates,
-            chapterTurnReady: await isChapterTurnReady(book),
-            learned: await cardsFor(allLearned),
+            learned: await cardsFor(await learnedInBattle(book.userId, encounter.id, asked, learnedIds)),
         };
+    } else if (status === "retreated") {
+        const goal = await fightFor(book.id, enemy.id);
+        if (goal) settled = await settle(book, goal, "failed", `${enemy.name} drove ${book.playerName} back.`);
     }
 
     if (xp > 0) {
@@ -207,6 +203,8 @@ export async function submitAnswer(ctx: AiContext, book: Book, encounterId: stri
         stage: status === "active" ? encounter.stages[nextIndex]?.client ?? null : null,
         xp,
         victory,
+        settled,
+        story: status === "active" ? null : await storyState(await db.query.books.findFirst({ where: eq(books.id, book.id) }) ?? book),
     };
 }
 

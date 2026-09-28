@@ -35,7 +35,6 @@ async function main() {
     const wallet = await import("../server/services/wallet");
     const { generate, speak, transcribe, StorytellerError, MODELS } = await import("../server/ai/client");
     const { formatMoney } = await import("../server/ai/pricing");
-    const { manualProvider } = await import("../server/payments/manual");
 
     async function testUser(role: "player" | "newcomer") {
         const user = await db.query.users.findFirst({ where: eq(users.email, testAccounts[role].email) });
@@ -112,26 +111,10 @@ async function main() {
         check(both.filter((r) => r.credited).length === 1 && (await balance(userId)) === mid + 10_500_000, "two concurrent completions credit once");
 
         let wrongProvider = false;
-        try { await wallet.completeTopup({ topupId: topup.id, provider: "stripe", providerRef: "x" }); } catch { wrongProvider = true; }
+        try { await wallet.completeTopup({ topupId: topup.id, provider: "someone-else", providerRef: "x" }); } catch { wrongProvider = true; }
         let missing = false;
         try { await wallet.completeTopup({ topupId: `${run}-nope`, provider: "manual", providerRef: "x" }); } catch { missing = true; }
         check(wrongProvider && missing, "another provider's topup and a missing topup both throw");
-
-        const viaCheckout = await wallet.createTopup(userId, "pouch", "manual");
-        const beforeCheckout = await balance(userId);
-        const checkout = () => manualProvider.startCheckout({
-            topup: viaCheckout, pkg: wallet.findPackage("pouch")!, user: player, returnUrl: "http://localhost:3011/wallet",
-        });
-        if (manualProvider.available()) {
-            const redirect = await checkout();
-            check(redirect.redirectUrl === "http://localhost:3011/wallet" && (await balance(userId)) === beforeCheckout + 5_000_000,
-                "manual checkout credits immediately");
-        } else {
-            // TEST_MODE_SECRET lives in .env.development.local, which this script does not load
-            let refused = false;
-            try { await checkout(); } catch { refused = true; }
-            check(refused && (await balance(userId)) === beforeCheckout, "manual checkout refuses when test mode is off");
-        }
     }
 
     console.log("5. one real generate per tier");

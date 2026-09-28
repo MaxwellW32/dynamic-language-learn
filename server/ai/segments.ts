@@ -2,7 +2,7 @@ import "server-only";
 import type { DictEntry } from "@/db/schema";
 import { POS_NAMES } from "@/game/dictionary";
 import { LANGUAGES, type LangCode } from "@/game/languages";
-import type { DialogueOption, PassageChoice } from "@/game/payloads";
+import type { DialogueOption } from "@/game/payloads";
 import { respace, type Segment } from "@/game/segments";
 import { tokenize } from "../services/dictionary";
 import type { PlannedWord } from "../services/learning";
@@ -93,13 +93,4 @@ export async function toDialogueOptions(
         return { key: `o${i + 1}`, segments, tone: option.tone.slice(0, 24), inTarget: option.inTarget };
     }));
     return built.filter((option): option is DialogueOption => option !== null);
-}
-
-export function toChoices(choices: { label: string; tone: string }[] | null): PassageChoice[] | null {
-    if (!choices || choices.length < 2) return null;
-    return choices.slice(0, 3).map((choice, i) => ({
-        key: `c${i + 1}`,
-        label: [{ t: "text", v: choice.label.trim() }],
-        tone: choice.tone.slice(0, 24),
-    }));
 }

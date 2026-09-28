@@ -7,8 +7,8 @@ import { useState } from "react";
 import { formatMoney } from "@/server/ai/pricing";
 import { Meter } from "@/components/ui/Panel";
 import {
-    bookAtom, busyAtom, chapterTurnReadyAtom, journalAtom, learnerAtom, modeAtom, nearestAtom,
-    questsAtom, sceneAtom, stickAtom, walletAtom, worldReadyAtom,
+    bookAtom, busyAtom, journalAtom, learnerAtom, modeAtom, nearestAtom,
+    sceneAtom, stickAtom, storyAtom, walletAtom, worldReadyAtom,
 } from "./state";
 import { useGame } from "./useGame";
 
@@ -16,7 +16,7 @@ import { useGame } from "./useGame";
 const hintsSeenAtom = atomWithStorage("wordbound.hints-seen", false);
 
 const TIME_ICON: Record<string, string> = { dawn: "🌅", day: "☀️", golden: "🌤️", dusk: "🌇", night: "🌙" };
-const KIND_ICON: Record<string, string> = { talkTo: "💬", persuade: "🎭", defeat: "⚔️", visit: "🧭", inspect: "🔎", learnWords: "✦" };
+export const GOAL_ICON: Record<string, string> = { talk: "💬", persuade: "🎭", fight: "⚔️", visit: "🧭", examine: "🔎" };
 
 /** the small things that sit on the world all the time */
 export function Hud() {
@@ -28,7 +28,7 @@ export function Hud() {
     const nearest = useAtomValue(nearestAtom);
     const learner = useAtomValue(learnerAtom);
     const wallet = useAtomValue(walletAtom);
-    const turnReady = useAtomValue(chapterTurnReadyAtom);
+    const story = useAtomValue(storyAtom);
     const stick = useAtomValue(stickAtom);
     const setJournal = useSetAtom(journalAtom);
     const game = useGame();
@@ -75,17 +75,18 @@ export function Hud() {
                         </Link>
                     )}
                     <IconButton label="The book" onClick={() => setJournal("story")}>📖</IconButton>
-                    <IconButton label="Quests" onClick={() => setJournal("quests")}>📜</IconButton>
+                    <IconButton label="What the story asks" onClick={() => setJournal("goals")}>📜</IconButton>
+                    <IconButton label="People you have met" onClick={() => setJournal("people")}>✉️</IconButton>
                     <Link href="/" className="glass rounded-lg w-10 h-10 grid place-items-center text-lg hover:bg-night/75 transition-colors" aria-label="Back to your shelf" title="Back to your shelf">
                         🚪
                     </Link>
                 </div>
             </header>
 
-            {exploring && <QuestTracker />}
+            {exploring && <GoalTracker />}
 
             {/* the page is ready to turn */}
-            {exploring && turnReady && book.status === "active" && (
+            {exploring && !busy && story?.due === "turn" && book.status === "active" && (
                 <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 animate-rise">
                     <button
                         type="button"
@@ -151,42 +152,59 @@ function IconButton({ label, onClick, children }: { label: string; onClick: () =
     );
 }
 
-/** what the story is asking of you, kept small at the edge of the world */
-function QuestTracker() {
-    const quests = useAtomValue(questsAtom);
+/**
+ * What the story asks, kept small at the edge of the world: the chapter's
+ * checklist, one goal in hand at a time. What has been done is ticked; what
+ * did not come off is crossed out, kindly; what is still to come stays unseen.
+ * On a small screen only the goal in hand is shown.
+ */
+function GoalTracker() {
+    const story = useAtomValue(storyAtom);
+    const setJournal = useSetAtom(journalAtom);
     const [open, setOpen] = useState(true);
-    const active = quests.filter((q) => q.status === "active").slice(0, 3);
-    if (active.length === 0) return null;
+    if (!story || story.chapter.title === "") return null;
+
+    const inHand = story.goals.find((goal) => goal.status === "active");
+    const behind = story.goals.filter((goal) => goal.status !== "active").slice(-4);
+    const resting = story.due === "turn" ? "the chapter is told — turn the page"
+        : story.due !== null ? "the storyteller is writing…"
+        : null;
 
     return (
-        <aside className="absolute top-20 left-3 z-10 w-64 max-w-[70vw] hidden md:block">
+        <aside className="absolute top-[4.6rem] left-3 z-10 w-72 max-w-[78vw]">
             <button
                 type="button"
                 onClick={() => setOpen((o) => !o)}
-                className="glass rounded-t-lg px-3 py-1 text-xs tracking-widest uppercase text-parchment/80 cursor-pointer w-full text-left flex justify-between"
+                className="glass rounded-t-lg px-3 py-1 text-xs tracking-widest uppercase text-parchment/80 cursor-pointer w-full text-left flex justify-between gap-2"
                 aria-expanded={open}
             >
-                Quests <span aria-hidden>{open ? "–" : "+"}</span>
+                <span className="truncate">Chapter {story.chapter.index} of {story.chapter.of} · {story.chapter.title}</span>
+                <span aria-hidden>{open ? "–" : "+"}</span>
             </button>
             {open && (
-                <div className="glass rounded-b-lg !border-t-0 px-3 py-2 grid gap-2.5">
-                    {active.map((quest) => (
-                        <div key={quest.id}>
-                            <div className="font-display text-base leading-tight text-gold-bright">{quest.title}</div>
-                            <ul className="mt-0.5 grid gap-0.5">
-                                {quest.objectives.map((o) => (
-                                    <li key={o.id} className={`text-sm leading-snug flex gap-1.5 ${o.status === "completed" ? "text-parchment/45 line-through" : o.waiting ? "text-parchment/50" : "text-parchment/90"}`}>
-                                        <span aria-hidden className="no-underline">{o.status === "completed" ? "✓" : KIND_ICON[o.kind] ?? "•"}</span>
-                                        <span>
-                                            {o.description}
-                                            {o.targetCount > 1 && o.status !== "completed" && <span className="text-parchment/60"> {o.progress}/{o.targetCount}</span>}
-                                            {o.whereName && o.status !== "completed" && <span className="text-parchment/55"> — in {o.whereName}</span>}
-                                        </span>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                    ))}
+                <div className="glass rounded-b-lg !border-t-0 px-3 py-2 grid gap-1">
+                    <ul className="hidden md:grid gap-0.5">
+                        {behind.map((goal) => (
+                            <li key={goal.id} className={`text-sm leading-snug flex gap-1.5 ${goal.status === "failed" ? "text-parchment/45" : "text-parchment/50"}`}>
+                                <span aria-hidden>{goal.status === "failed" ? "🍃" : "✓"}</span>
+                                <span className={goal.status === "failed" ? "line-through decoration-rose/70" : "line-through"}>{goal.title}</span>
+                            </li>
+                        ))}
+                    </ul>
+                    {inHand ? (
+                        <button type="button" onClick={() => setJournal("goals")} className="text-left flex gap-2 cursor-pointer">
+                            <span aria-hidden>{GOAL_ICON[inHand.kind] ?? "•"}</span>
+                            <span className="leading-snug">
+                                <span className="font-display text-base text-gold-bright">{inHand.title}</span>
+                                {inHand.whereName && <span className="block text-sm text-parchment/65">in {inHand.whereName} — follow the marked gate</span>}
+                            </span>
+                        </button>
+                    ) : (
+                        <p className="text-sm text-parchment/75 italic">{resting ?? "the world is yours to wander"}</p>
+                    )}
+                    {story.ahead > 0 && inHand && (
+                        <p className="hidden md:block text-xs text-parchment/45">{story.ahead === 1 ? "one more thing" : `${story.ahead} more things`} after this</p>
+                    )}
                 </div>
             )}
         </aside>

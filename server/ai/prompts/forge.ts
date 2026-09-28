@@ -8,11 +8,9 @@ import {
 } from "@/game/looks";
 import { generate, type AiContext } from "../client";
 import {
-    castFillSchema, openingSchema, placesFillSchema, storySeedSchema,
-    type Opening, type RegionSketch, type StorySeed, type WorldFill,
+    castFillSchema, placesFillSchema, storySeedSchema,
+    type RegionSketch, type StorySeed, type WorldFill,
 } from "../schemas";
-import type { WordOffer } from "../segments";
-import { RULEBOOK } from "./rulebook";
 
 const AUTHOR = `You are the author of a storybook adventure that a reader will live inside. You write vividly and economically. Wonder over darkness; peril without cruelty; nothing generic — every name, place and person should feel as if it could only belong to this book.`;
 
@@ -81,10 +79,13 @@ export type FillBrief = {
     buildings: string;
 };
 
-const LOOKS = `For each person's "look", choose from these lists only:
+export const LOOKS = `For each person's "look", choose from these lists only:
 build: ${list(BUILDS)} · age: ${list(AGES)} · skin: ${keys(SKIN_TONES)} · hair: ${list(HAIR_STYLES)} · hairColor: ${keys(HAIR_COLORS)} · outfit: ${list(OUTFITS)} · primary and secondary (cloth colours): ${keys(CLOTH_COLORS)} · hat: ${list(HATS)} · accessory: ${list(ACCESSORIES)}
 "voice" is one of: ${list(TTS_VOICES)}.
 Make people look different from one another, and let the look say who they are: a baker in an apron, a scholar with a book.`;
+
+/** what a person is made of, for whoever is asked to write one */
+export const personFields = (language: string) => `For each person: a name; "role" (their place in the world, two to four words); "personality" (two or three vivid traits, one of them a flaw or quirk); "appearance" (one sentence); "backstory" (two or three sentences); "secret" (one thing they would only tell a friend — it should matter to the story); "goal" (what they want right now, concretely); "speechStyle" (how they talk: rhythm, pet phrases, formality); "likes": two or three things that warm them to someone, and "dislikes": two or three that put them off — each a few plain words naming something a reader could do, or avoid, in conversation with them (a subject to raise, a manner of speaking, a way of behaving), and particular to this person; "look"; "voice"; and "barks": three short things they call out in ${language} as the hero passes — a greeting, a remark about the weather or their work, an invitation — each with its English translation. Barks are one to five words of simple, natural ${language}.`;
 
 type FillInput = {
     seed: Pick<StorySeed, "title" | "premise" | "tone" | "heart" | "facts">;
@@ -124,7 +125,7 @@ async function writeCast(ctx: AiContext, input: FillInput) {
 
 The geography of the book is already drawn. People it. Answer for every key in the brief, using each key exactly as given, and no others.
 
-For each person: a name; "role" (their place in the world, two to four words); "personality" (two or three vivid traits, one of them a flaw or quirk); "appearance" (one sentence); "backstory" (two or three sentences); "secret" (one thing they would only tell a friend — it should matter to the story); "goal" (what they want right now, concretely); "speechStyle" (how they talk: rhythm, pet phrases, formality); "look"; "voice"; and "barks": three short things they call out in ${target.name} as the hero passes — a greeting, a remark about the weather or their work, an invitation — each with its English translation. Barks are one to five words of simple, natural ${target.name}.
+${personFields(target.name)}
 
 The cast must interlock: shared history, small tensions, reasons to send the hero to one another. At least one of them knows more about the mystery than they admit.
 
@@ -182,69 +183,6 @@ ${input.brief.buildings}`,
 export async function writeWorld(ctx: AiContext, input: FillInput): Promise<WorldFill> {
     const [people, places] = await Promise.all([writeCast(ctx, input), writePlaces(ctx, input)]);
     return { ...people, ...places };
-}
-
-/** call three: the first page, the first quests, and the threads the story will pull on */
-export async function writeOpening(ctx: AiContext, input: {
-    bible: string;
-    heart: string;
-    cast: string;
-    creatures: string;
-    places: string;
-    landmarks: string;
-    startPlace: string;
-    offer: WordOffer;
-    immersion: number;
-    cacheKey: string;
-}): Promise<Opening> {
-    return generate({
-        ctx,
-        task: "forge-opening",
-        tier: "story",
-        effort: "none",
-        timeoutMs: FORGE_TIMEOUT_MS,
-        cacheKey: input.cacheKey,
-        schema: openingSchema,
-        instructions: `${RULEBOOK}
-
-${input.bible}`,
-        input: `Write the opening of the book.
-
-"chapterTitle": two to five words.
-
-"passage": the first page — the hero arrives at ${input.startPlace}. 90 to 130 words. End on something worth walking toward.
-
-"quests": two or three quests for the beginning of the story: meeting the world and its people, and the first hints of the mystery. Stakes are gentle and local. Each has a title, a description of one or two sentences in second person, "giverKey" (the key of the person who gives it, or null), and one to four objectives.
-Objective kinds, and what "targetKey" must be:
-- "talkTo": meet someone → a person key
-- "persuade": win someone over about something specific — say what, in the description → a person key
-- "defeat": best a creature → a creature key
-- "visit": reach a place → a place key
-- "inspect": examine a landmark → a landmark key
-- "learnWords": grow the hero's vocabulary → null, with "wordCount" 3 to 8
-Use only keys listed below. Objectives should chain naturally: meet, then learn, then venture, then face. At most one "learnWords" objective in all. The first objective of the first quest must be something the hero can do in ${input.startPlace}. Do not ask the hero to defeat the boss yet.
-
-"threads": three or four threads the story will pull on — a mystery, a promise, a conflict, a bond. Each has a title, a kind, a summary of one or two sentences, and an importance from 1 to 10. They are notes to yourself: the reader does not see them.
-
-What the book is really about (never state it outright): ${input.heart}
-
-IMMERSION LEVEL: ${input.immersion}
-
-OFFERED WORDS
-${input.offer.brief}
-
-PEOPLE
-${input.cast}
-
-CREATURES
-${input.creatures}
-
-PLACES
-${input.places}
-
-LANDMARKS
-${input.landmarks}`,
-    });
 }
 
 /** the look of a region that joins the world later, as a story grows */

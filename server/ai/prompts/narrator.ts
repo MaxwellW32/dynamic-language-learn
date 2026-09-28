@@ -1,164 +1,84 @@
 import "server-only";
-import { BIOMES, TIMES_OF_DAY, WEATHERS } from "@/game/looks";
 import { generate, type AiContext } from "../client";
-import { chapterTurnSchema, narrationSchema, type ChapterTurn, type Narration } from "../schemas";
+import { tellingSchema, type Telling } from "../schemas";
 import type { WordOffer } from "../segments";
 import { RULEBOOK } from "./rulebook";
 
-export type NarrationKind = "arrival" | "inspect" | "victory" | "beat" | "choice";
-
 export type NarratorBrief = {
     bible: string;
+    /** the whole book in outline: the storyteller knows where it is going, the reader does not */
+    outline: string;
     immersion: number;
-    scene: string;
-    /** the last passages of the book, as plain text */
+    /** the chapter in hand: what it is called and what it is for */
+    chapter: string;
+    /** the chapters behind, and what has come of this one's goals so far */
+    storySoFar: string;
+    /** the last pages of the book, as plain text */
     lately: string;
-    /** recent chronicle lines */
-    chronicle: string;
-    /** the director's standing note on where the story should lean */
-    lean: string;
+    scene: string;
+    /** what the hero has come by and still carries, or "" */
+    carrying: string;
     offer: WordOffer;
     cacheKey: string;
 };
 
-/**
- * `forks` says when a passage should end in a choice, or null where it never
- * does. A reader who is never asked anything is only being read to: the
- * moments a quest turns on are theirs to steer, and what they choose is
- * written into the chronicle with weight, where the director finds it.
- */
-const TASK: Record<NarrationKind, { words: string; how: string; forks: string | null }> = {
-    arrival: {
-        words: "60 to 100",
-        how: "The hero has just arrived somewhere for the first time. Let them take it in through the senses — the ambience notes are yours to use — and let one thing in the scene invite them closer.",
-        forks: null,
-    },
-    inspect: {
-        words: "50 to 90",
-        how: "The hero examines something closely. Reveal its lore as a discovery: let the object imply its history rather than recite it. If it can whisper toward something the hero is seeking, let it.",
-        forks: "if what the hero has found invites them to DO something — open it, take it, follow it, leave it be — end the passage there and offer two or three such ways on. If it only tells them something, null.",
-    },
-    victory: {
-        words: "40 to 70",
-        how: "The hero has just bested a creature with words. Let the creature yield in its own way — it is not slain, it is answered. Warm, a little triumphant, then back to the world.",
-        forks: null,
-    },
-    beat: {
-        words: "50 to 90",
-        how: "Something in the story has just moved. Mark the moment, let its weight land, and turn the hero's eyes toward what comes next.",
-        forks: "this is a turning point, and the story is the hero's to steer: end the passage at the moment of deciding and offer two or three ways on that would lead to different things — whom to trust, what to do with what was found, which way to turn. Null only when nothing could reasonably differ.",
-    },
-    choice: {
-        words: "60 to 100",
-        how: "The hero has chosen. Write what follows from that choice — it must matter: something is gained, lost, learned or changed because they chose this and not the other.",
-        forks: null,
-    },
-};
+/** something to tell: a goal's pointer, or a thing the hero has bent down to look at */
+export type ToTell = { key: string; title: string; brief: string };
 
-export async function writeNarration(ctx: AiContext, brief: NarratorBrief, kind: NarrationKind, about: string): Promise<Narration> {
-    const task = TASK[kind];
+/**
+ * Turn pointers into pages. Tells that follow one another are written at one
+ * sitting, a page each: one request instead of several, and pages that read
+ * on from each other because one hand wrote them together.
+ */
+export async function writeTelling(ctx: AiContext, brief: NarratorBrief, tells: ToTell[], options: {
+    task?: string;
+    words?: string;
+    how?: string;
+    /** set when a first attempt came back with a page that had none of the TARGET language in it */
+    again?: boolean;
+} = {}): Promise<Telling> {
+    const many = tells.length > 1;
     return generate({
         ctx,
-        task: `narrate-${kind}`,
+        task: options.task ?? "tell",
         tier: "story",
         effort: "none",
         cacheKey: brief.cacheKey,
-        maxOutputTokens: 1800,
-        schema: narrationSchema,
-        // one name for every kind of passage: an arrival can then reuse the prefix a quest beat has just paid for
-        schemaName: "narration",
+        maxOutputTokens: 900 + tells.length * 1100,
+        schema: tellingSchema,
+        // one name for every page the storyteller writes: each finds the prefix the last one paid for
+        schemaName: "telling",
         instructions: `${RULEBOOK}
 
-${brief.bible}`,
+${brief.bible}
+
+${brief.outline}`,
         input: `IMMERSION LEVEL: ${brief.immersion}
 
-Write the next passage of the book: ${task.words} words.
+Write ${many ? `${tells.length} pages of the book, one for each of the things to tell below, in their order` : "the next page of the book"}: ${options.words ?? "60 to 110"} words${many ? " each. Every page stands as a page of its own; together they read on from one another" : ""}.
 
-${task.how}
+${options.how ?? "What to tell is a pointer, written for you and not for the reader: tell it as story, in the hero's own present, through what they see and hear and are told. Say what it asks you to say and no more. Leave the hero free: never write what they decide, say or feel about what is asked of them next."}
 
-WHAT TO WRITE ABOUT
-${about}
+${many ? "THINGS TO TELL" : "WHAT TO TELL"}
+${tells.map((tell) => `- ${tell.key}: ${tell.title}. ${tell.brief}`).join("\n")}
+
+THE CHAPTER IN HAND
+${brief.chapter}
+
+THE STORY SO FAR
+${brief.storySoFar || "(it has only just begun)"}
+
+THE BOOK'S LAST PAGES
+${brief.lately || "(these are its first)"}
 
 THE SCENE
 ${brief.scene}
-
-THE BOOK SO FAR, MOST RECENTLY
-${brief.lately || "(these are its first pages)"}
-
-WHAT HAS HAPPENED
-${brief.chronicle || "(nothing yet)"}
-${brief.lean ? `\nWHERE THE STORY IS LEANING\n${brief.lean}\n` : ""}
+${brief.carrying ? `\nTHE HERO CARRIES\n${brief.carrying}\n` : ""}
 OFFERED WORDS
 ${brief.offer.brief}
-The passage must hold at least one "vocab" or "tl" segment.
+Every page must hold at least one "vocab" or "tl" segment.${many ? " Use each offered word at most twice across all the pages." : ""}${options.again ? `
+You have written this once already, and a page came back with nothing in the TARGET language: the reader learned nothing from it. This time, in every page, something is said or named in the TARGET language — an offered word where one fits, and where none does, a short "tl" segment in someone's mouth.` : ""}
 
-Also:
-- "eventSummary": one past-tense line for the chronicle if this moment is worth remembering later; otherwise null.
-- "importance": how much this matters to the story, 1 (a pleasant detail) to 10 (nothing will be the same).
-- "choices": ${task.forks
-        ? `${task.forks} Each choice is a "label" of at most eight words in the hero's voice ("Follow the sound into the reeds") and a one-word "tone". Choices are things the hero can do here and now, with what the brief says exists.`
-        : "null."}`,
-    });
-}
-
-export async function writeChapterTurn(ctx: AiContext, input: {
-    brief: NarratorBrief;
-    closing: string;
-    nextStage: string | null;
-    stageGuidance: string;
-    threads: string;
-    cast: string;
-    creatures: string;
-    places: string;
-    landmarks: string;
-    /** the sides of existing places a new region could be joined to; empty when the world is full */
-    room: boolean;
-}): Promise<ChapterTurn> {
-    const { brief } = input;
-    return generate({
-        ctx,
-        task: "chapter-turn",
-        tier: "story",
-        effort: "low",
-        cacheKey: brief.cacheKey,
-        maxOutputTokens: 4500,
-        schema: chapterTurnSchema,
-        instructions: `${RULEBOOK}
-
-${brief.bible}`,
-        input: `IMMERSION LEVEL: ${brief.immersion}
-
-The chapter "${input.closing}" is finished. ${input.nextStage ? `The book turns to ${input.nextStage}. ${input.stageGuidance}` : "This was the last chapter: the book is ending."}
-
-Write:
-- "closingSummary": two or three past-tense sentences for the table of contents.
-- "nextChapterTitle": two to five words${input.nextStage ? "" : ` (for the epilogue)`}.
-- "passage": 70 to 110 words — ${input.nextStage ? "the world shifts, the stakes deepen, the hero feels the new chapter begin." : "the ending: what has changed, who is there to see it, the hero's place in the world they altered."}
-- "quests": ${input.nextStage ? `two or three quests for the new chapter, built on what has actually happened — if the hero made a promise, broke one, won a friend or lost one, the quests know it. Use the objective kinds and keys as listed below; use only keys that are listed. Never repeat something already done. Between them the quests ask for more than talk: somewhere to reach, something to examine, a creature to face.` : "an empty list."}
-- "newFacts": things that have become true and must not be forgotten — at most three, each one short sentence. Often empty.
-- "newRegion": ${input.nextStage && input.room ? `if the story now needs somewhere new — a place spoken of but never seen — describe it: "kind" (settlement, wilds or depths), a name, "biome" (one of: ${BIOMES.join(", ")}), "timeOfDay" (${TIMES_OF_DAY.join(", ")}), "weather" (${WEATHERS.join(", ")}), "ambience", "description", "themeWords". A new quest may send the hero there with a "visit" objective whose targetKey is "new". Otherwise null — do not add a place the story does not need.` : "null."}
-
-Objective kinds and what "targetKey" must be: "talkTo" and "persuade" → a person key; "defeat" → a creature key; "visit" → a place key; "inspect" → a landmark key; "learnWords" → null with "wordCount" 3 to 8.
-
-OPEN THREADS
-${input.threads || "(none)"}
-
-WHAT HAPPENED IN THE CHAPTER
-${brief.chronicle || "(little)"}
-${brief.lean ? `\nWHERE THE STORY IS LEANING\n${brief.lean}\n` : ""}
-PEOPLE
-${input.cast}
-
-CREATURES STILL AT LARGE
-${input.creatures || "(none)"}
-
-PLACES
-${input.places}
-
-LANDMARKS
-${input.landmarks || "(none)"}
-
-OFFERED WORDS
-${brief.offer.brief}`,
+"pages": one entry for each key above, with "key" exactly as given.`,
     });
 }

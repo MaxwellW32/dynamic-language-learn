@@ -22,6 +22,7 @@ export function reasonName(reason: string): string {
     if (reason === "topup") return "Credit added";
     if (reason === "starter-gift") return "A gift to begin with";
     if (reason === "test-seed") return "Test refill";
+    if (reason === "refund") return "Payment given back";
     if (reason.startsWith("ai:")) {
         const task = reason.slice(3);
         if (task === "dialogue") return "A conversation";

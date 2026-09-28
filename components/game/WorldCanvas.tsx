@@ -48,6 +48,7 @@ export function WorldCanvas({ scene, quality = "auto", events, onEngine, onLoade
                 onNearest: (target) => eventsRef.current.onNearest(target),
                 onAct: (target) => eventsRef.current.onAct(target),
                 onContact: (id) => eventsRef.current.onContact(id),
+                onReach: (goalId) => eventsRef.current.onReach(goalId),
                 onWord: (id) => eventsRef.current.onWord(id),
                 onStick: (stick) => eventsRef.current.onStick(stick),
             }, { quality });

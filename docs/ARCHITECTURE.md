@@ -346,8 +346,53 @@ Two modes, chosen at onboarding and switchable:
   storage), rides each request, and is never stored or logged. Usage is still recorded, uncharged.
 
 Top-ups go through a `PaymentProvider` interface. A payment is credited exactly once: the ledger
-has a unique index on (reason, ref) and `topups` on (provider, providerRef), so a repeated webhook
+has a unique index on (reason, ref) and `topups` on (provider, providerRef), so being told twice
 is a no-op.
+
+### Card payments: PowerTranz
+
+The merchant is in Jamaica, where Stripe does not operate; PowerTranz (First Atlantic Commerce)
+is the gateway. `server/payments/powertranz.ts` talks to it, `server/payments/rules.ts` holds what
+can be tested without it.
+
+1. **Set out.** `startTopupAction` writes a `topups` row (what will be charged, in which currency,
+   under which transaction id) and asks the gateway for a sale with 3-D Secure. The gateway
+   answers with a page.
+2. **Handoff.** The page is kept on the row and the browser is sent to
+   `/api/payments/powertranz/handoff`, which serves it once. It is kept in the database, not in
+   memory, because on a serverless host the next request may reach another machine. The player
+   leaves for the card form and their bank **as a page of its own, not in a frame**: framed, the
+   bank is a third party and Safari and phone web views keep its cookies from it.
+3. **Return.** The bank sends the browser to `/api/payments/powertranz/callback` with an SpiToken.
+4. **Settle.** The token is given to the gateway (`/spi/payment`), and **only the gateway's answer
+   is believed** — including which top-up the payment is for. What the browser posted can be
+   written by anyone. The answer must be approved, must name this top-up, its transaction id, its
+   amount and its currency, and the bank must have verified the cardholder. An approval that
+   fails any of these is voided on the spot.
+
+Prices are in US dollars because what they buy is. A merchant account that takes only Jamaican
+dollars charges the same value at the owner's rate (`POWERTRANZ_JMD_PER_USD`), rounded up.
+
+**Who takes the card.** With a hosted payment page, PowerTranz does, and this app never sees a
+card number (PCI SAQ A). With `POWERTRANZ_CARD_FORM=own` the player types it into
+`components/account/CardForm.tsx`; it passes through the server once, to the gateway, and is
+neither stored nor logged — but the server is then in scope for PCI DSS (SAQ A-EP at the least).
+Prefer the hosted page.
+
+**Abuse.** Six unpaid attempts in an hour and the player is asked to wait: someone testing stolen
+card numbers fails over and over. 3-D Secure is always asked for.
+
+**The test gateway** (`app/api/dev/powertranz`) is a pretend PowerTranz that exists only in
+development and serves only the seeded test accounts, who in turn are never sent to the real one.
+Where the bank would be it shows buttons: approve, decline, fail the verification, and answers no
+gateway should give (approved but unverified, the wrong amount, the wrong order).
+`scripts/checkPayments.ts` presses them all.
+
+### Selling through the app stores
+
+A web view of this site in an App Store or Play Store app may not sell credit by card. Both
+stores require their own in-app purchase for digital goods used inside the app, and take 15–30%
+of it — more than the margin on a package. The roadmap sets out the ways round this.
 
 ---
 

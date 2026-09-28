@@ -246,7 +246,10 @@ export async function planWords(
             where w."userId" = ${userId} and w.lang = ${lang} and w."dueAt" <= now()
               and e.teachable and length(e.gloss) <= ${MAX_GLOSS} ${posFilter}
               and lower(e.lemma) <> lower(e.gloss)
-            order by w."dueAt" asc
+            -- A battle asks for what is most overdue. A page takes what has been seen least: reading a word does
+            -- not move its schedule, so by due date alone the same two words would be offered to every page of a
+            -- book, and the storyteller would work a boat and a fish into every scene.
+            order by ${opts.embed ? sql`w."timesSeen" asc, w."dueAt" asc` : sql`w."dueAt" asc`}
             limit ${review * 2 + 4}`).then((r) => r.rows),
         // a place's theme words name things: "bread" should find the loaf, not the verb "to bread"
         !needsImmersion ? [] : wordsMeaning(lang, opts.sceneKeys!, {

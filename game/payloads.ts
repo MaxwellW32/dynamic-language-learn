@@ -1,6 +1,7 @@
 import type { Segment } from "./segments";
 import type { ClientChallenge } from "./challenges/types";
 import type { WordCard } from "./dictionary";
+import type { GoalKind } from "./goals";
 import type { ActorLook, CreatureLook } from "./looks";
 import type { GateSide, RegionKind } from "./worldgen/layout";
 
@@ -58,6 +59,8 @@ export type SceneLandmark = {
     label: WorldLabel | null;
     /** already examined: its passage is in the book and rereads for free */
     examined: boolean;
+    /** the goal in hand is to examine it */
+    sought: boolean;
 };
 
 export type SceneGate = {
@@ -67,6 +70,8 @@ export type SceneGate = {
     z: number;
     rot: number;
     label: string;
+    /** the goal in hand lies through it */
+    sought: boolean;
 };
 
 export type SceneCharacter = {
@@ -81,7 +86,7 @@ export type SceneCharacter = {
     affinity: number;
     /** short lines they call out as the hero passes */
     barks: Segment[][];
-    /** an open quest objective points at them */
+    /** the goal in hand points at them */
     sought: boolean;
     /** the hero has spoken with them before */
     met: boolean;
@@ -95,7 +100,7 @@ export type SceneEnemy = {
     look: CreatureLook;
     x: number;
     z: number;
-    /** an open quest objective points at it */
+    /** the goal in hand points at it */
     sought: boolean;
 };
 
@@ -121,67 +126,101 @@ export type ScenePayload = {
 /* the book                                                            */
 /* ------------------------------------------------------------------ */
 
-/** a fork in the story */
-export type PassageChoice = {
-    key: string;
-    /** what the reader would do, in a few words */
-    label: Segment[];
-    /** the flavour of the choice: "bold", "kind", "cautious", "curious"… */
-    tone: string;
-};
-
 export type PassageView = {
     id: string;
+    /** narration: what the storyteller told · discovery: what the hero found by looking */
     kind: "narration" | "discovery" | "event" | "choice";
     segments: Segment[];
-    choices: PassageChoice[] | null;
-    chosenKey: string | null;
     chapterIndex: number;
 };
 
+/** a chapter the hero has reached; those still ahead are never sent */
 export type ChapterView = {
     id: string;
     index: number;
     title: string;
     summary: string;
+    open: boolean;
 };
 
-export type ObjectiveKind = "talkTo" | "persuade" | "defeat" | "visit" | "inspect" | "learnWords";
+/** the kinds of goal a reader is shown: everything but what the storyteller tells */
+export type ShownGoalKind = Exclude<GoalKind, "tell">;
 
-export type QuestView = {
+export type GoalView = {
     id: string;
+    kind: ShownGoalKind;
     title: string;
-    description: string;
-    status: "active" | "completed" | "failed";
-    giverName: string | null;
-    objectives: {
-        id: string;
-        description: string;
-        kind: ObjectiveKind;
-        status: "active" | "completed" | "failed";
-        progress: number;
-        targetCount: number;
-        /** not yet its turn: an earlier step of the quest comes first */
-        waiting: boolean;
-        /** where to go: the region that holds the target, when it is not this one */
-        whereName: string | null;
-    }[];
+    status: "active" | "done" | "failed";
+    /** how it ended, in a line; empty while it is in hand */
+    outcome: string;
+    /** where to go: the region that holds what it points at, when that is not this one */
+    whereName: string | null;
+    /** who or what it points at, by name */
+    targetName: string | null;
 };
 
-export type QuestUpdate = {
-    questTitle: string;
-    objectiveDescription: string;
-    questCompleted: boolean;
-    /** a persuasion definitively refused — the quest is lost, the story moves on */
-    failed?: boolean;
-    /** a quest the story has just handed the hero */
-    isNew?: boolean;
+/** a place to walk to, marked in the world by a column of light */
+export type Beacon = {
+    goalId: string;
+    regionId: string;
+    x: number;
+    z: number;
+    /** how near counts as having arrived */
+    radius: number;
+    name: string;
+};
+
+/**
+ * What the book will do next without being asked:
+ * page: the storyteller has something to tell · bend: a goal failed and the
+ * road ahead is to be written again · plan: the chapter's goals are to be
+ * written · turn: the chapter is over, and waits for the page to be turned ·
+ * null: the goal in hand is the reader's to do.
+ */
+export type StoryDue = "page" | "bend" | "plan" | "turn" | null;
+
+export type StoryState = {
+    chapter: { id: string; index: number; title: string; of: number };
+    /** this chapter's goals, in order: what is settled and what is in hand */
+    goals: GoalView[];
+    /** how many more the chapter holds after the one in hand */
+    ahead: number;
+    due: StoryDue;
+    beacon: Beacon | null;
+    /** what the hero has come by and still carries */
+    carrying: string[];
+};
+
+/** a goal has just ended, one way or the other */
+export type GoalSettled = {
+    goalId: string;
+    title: string;
+    status: "done" | "failed";
+    outcome: string;
 };
 
 export type ChronicleEntry = {
     id: string;
     summary: string;
     at: string;
+};
+
+/** someone the hero has met, and may write to from anywhere */
+export type PersonView = {
+    id: string;
+    name: string;
+    role: string;
+    mood: string;
+    affinity: number;
+    likes: string[];
+    dislikes: string[];
+    whereName: string | null;
+    /** in the region the hero is in */
+    here: boolean;
+    /** has left the story: what they said can be reread, but they cannot be written to */
+    gone: boolean;
+    /** how many lines have passed between them and the hero */
+    lines: number;
 };
 
 /* ------------------------------------------------------------------ */
@@ -215,6 +254,21 @@ export type MessageView = {
     note: LanguageNote | null;
 };
 
+/**
+ * What the hero has come to someone for, when the goal in hand is theirs to
+ * settle. They answer for themselves: when asked, or of their own accord if
+ * they are won — or have had enough.
+ */
+export type Stake = {
+    goalId: string;
+    kind: "talk" | "persuade";
+    title: string;
+    /** persuade: where they stand, -5 … 5; null when there is nothing to be swayed on */
+    lean: number | null;
+    /** the hero has said enough for an answer to be asked for */
+    canAsk: boolean;
+};
+
 export type DialogueState = {
     conversationId: string;
     character: {
@@ -224,12 +278,17 @@ export type DialogueState = {
         mood: string;
         affinity: number;
         voiceId: string;
+        likes: string[];
+        dislikes: string[];
     };
     messages: MessageView[];
     options: DialogueOption[];
     words: WordCard[];
     /** true when the character has spoken first (a greeting written for this visit) */
     greeted: boolean;
+    stake: Stake | null;
+    /** the two are not in the same place: words pass between them from afar, and no goal can be settled */
+    remote: boolean;
 };
 
 export type DialogueTurnResult = {
@@ -240,12 +299,13 @@ export type DialogueTurnResult = {
     affinity: number;
     affinityDelta: number;
     words: WordCard[];
-    questUpdates: QuestUpdate[];
-    /** narration written into the book when this exchange resolved a quest */
-    beat: PassageView | null;
     /** xp earned for producing the target language */
     xp: number;
-    chapterTurnReady: boolean;
+    /** what is still at stake after this exchange; null when nothing is, or when it has just been settled */
+    stake: Stake | null;
+    /** they gave their answer in this exchange */
+    settled: GoalSettled | null;
+    story: StoryState;
     wallet: WalletView;
 };
 
@@ -263,6 +323,8 @@ export type EncounterView = {
     totalStages: number;
     stage: ClientChallenge | null;
     words: WordCard[];
+    /** the goal in hand is to best this creature: being driven back will end it */
+    atStake: string | null;
 };
 
 export type AnswerResult = {
@@ -279,31 +341,54 @@ export type AnswerResult = {
     xp: number;
     victory: {
         defeatLine: string;
-        passage: PassageView | null;
-        words: WordCard[];
-        questUpdates: QuestUpdate[];
-        chapterTurnReady: boolean;
         /** words answered correctly for the first time in this battle */
         learned: WordCard[];
     } | null;
+    /** the battle was the goal in hand, and has settled it: won, or lost */
+    settled: GoalSettled | null;
+    /** present once the battle is over */
+    story: StoryState | null;
 };
 
 /* ------------------------------------------------------------------ */
-/* narration, travel, the wallet                                       */
+/* the story moving, travel, the wallet                                */
 /* ------------------------------------------------------------------ */
 
-export type NarrationResult = {
-    /** null when only quest bookkeeping happened (e.g. revisiting a place) */
-    passage: PassageView | null;
+/** what the storyteller wrote, and how the story stands after it */
+export type StoryStep = {
+    /** in the order they are to be read; empty when nothing was told */
+    pages: PassageView[];
     words: WordCard[];
-    questUpdates: QuestUpdate[];
-    chapterTurnReady: boolean;
+    story: StoryState;
+    /** the region as it now is: people may have come, gone or moved */
+    scene: ScenePayload;
+    regions: BookOverview["regions"];
+    people: PersonView[];
+    settled: GoalSettled | null;
     wallet: WalletView;
+};
+
+/** the hero bent down to look at something */
+export type ExamineResult = {
+    page: PassageView | null;
+    words: WordCard[];
+    story: StoryState;
+    /** looking at it was the goal in hand */
+    settled: GoalSettled | null;
+    wallet: WalletView;
+};
+
+/** the hero walked up to where a goal sent them */
+export type ReachResult = {
+    story: StoryState;
+    settled: GoalSettled | null;
 };
 
 export type TravelResult = {
     scene: ScenePayload;
-    arrival: NarrationResult | null;
+    story: StoryState;
+    /** arriving was the goal in hand */
+    settled: GoalSettled | null;
 };
 
 export type WalletView = {
@@ -380,25 +465,21 @@ export type BookOverview = {
     scene: ScenePayload;
     /** every region the hero has found, for the map in the journal */
     regions: { id: string; name: string; kind: RegionKind; biome: string; visited: boolean; current: boolean }[];
-    quests: QuestView[];
+    story: StoryState;
+    people: PersonView[];
     chapters: ChapterView[];
     passages: PassageView[];
     words: WordCard[];
     chronicle: ChronicleEntry[];
     learner: LearnerView;
     activeEncounter: EncounterView | null;
-    chapterTurnReady: boolean;
     wallet: WalletView;
 };
 
-export type ChapterTurnResult = {
+export type ChapterTurnResult = StoryStep & {
     closedChapter: ChapterView;
-    newChapter: ChapterView;
-    passage: PassageView;
-    words: WordCard[];
-    quests: QuestView[];
-    scene: ScenePayload;
-    regions: BookOverview["regions"];
+    /** null when the chapter that closed was the last */
+    newChapter: ChapterView | null;
+    chapters: ChapterView[];
     storyCompleted: boolean;
-    wallet: WalletView;
 };

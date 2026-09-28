@@ -40,6 +40,10 @@ called done**. Do not rely on reading code when a screen or a flow can be run.
   For logic, prefer these to screenshots: reading a PNG costs about as much as a page of text
   and proves only what is on the screen.
 - **What it has cost:** `npx tsx scripts/usageReport.ts`.
+- **Paying:** a test account's wallet pays through the test gateway (`app/api/dev/powertranz`),
+  where a page of buttons stands in for the bank. `scripts/checkPayments.ts` walks every outcome.
+  `npm run test:seed` also clears a test account's unpaid attempts, of which only six an hour are
+  allowed.
 
 ### Ground rules for test runs
 
@@ -49,7 +53,10 @@ called done**. Do not rely on reading code when a screen or a flow can be run.
   conversation turn about half a cent. Do not loop.
 - Headless Chrome with a desktop GPU says nothing about a phone's frame rate — say so.
 - Port 3011 may be the owner's own `npm run dev`. Check who owns it before stopping anything; if
-  it is theirs, use it and leave it running.
+  it is theirs, use it and leave it running. If it is their `next start` (a production build,
+  where test mode is off), run your own `AUTH_URL=http://localhost:3012 npx next dev -p 3012`,
+  pass `baseUrl` to `openBrowser`, and **do not run `next build`**: it replaces the files their
+  server is serving.
 - Never read, print or edit `.env.local` or `.env.development.local`. Code reads `process.env`.
 
 ## Things that are easy to get wrong
@@ -77,8 +84,20 @@ called done**. Do not rely on reading code when a screen or a flow can be run.
   and refresh the books that already exist.
 - **Money** changes only in a transaction that also writes a `credit_ledger` row
   (`server/services/wallet.ts`). Never write `users.creditMicros` directly.
+- **A payment is believed only on the gateway's own answer** (`settle` in
+  `server/payments/powertranz.ts`). Nothing the browser posts to the callback may credit anyone,
+  name the top-up, or mark one failed. **Card numbers are never logged, stored or put in an error
+  message**; when touching the card form or the gateway client, check every `console` call and
+  every thrown message.
+- **`drizzle-kit push --force` skips the question it asks before dropping data.** Use
+  `npm run db:push` and answer it.
 - **Answers never reach the browser.** Challenge stages are stored with their answers
   (`StoredStage`); only `stage.client` is ever sent.
+- **A canvas must be given its size in CSS, and must not take part in the layout.** It is drawn
+  in device pixels; left to size itself it is bigger than its holder on every screen that is not
+  at 100%, which is every phone and most laptops, and the page grows without end. Test anything
+  with a canvas at a scale other than 1: `node scripts/checkScaling.mjs [bookId]`, or
+  `openBrowser({ scale: 1.5 })`. The default desktop test browser is at 100% and will not show it.
 - **The engine takes no React state and causes no renders.** It writes `transform` on label
   elements itself. HUD components talk to it through the handle `WorldCanvas` gives them.
 - **Region layout is a pure function of (seed, kind, biome, open gate sides)**

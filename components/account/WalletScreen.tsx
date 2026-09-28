@@ -14,15 +14,26 @@ type WalletData = Extract<Awaited<ReturnType<typeof walletActivityAction>>, { ok
  * shows the new balance with no client state to keep in step.
  */
 export function WalletScreen({ data }: { data: WalletData }) {
-    const { wallet, activity, usage, packages, provider } = data;
+    const { wallet, activity, usage, packages, checkout, outcome } = data;
 
     return (
         <div className="grid gap-10">
+            {outcome && (
+                <div
+                    role="status"
+                    className={`rounded-md border-2 px-4 py-3 text-center text-lg ${outcome.paid ? "border-moss/60 bg-moss/10 text-moss-deep" : "border-rose/50 bg-rose/10 text-ink"}`}
+                >
+                    {outcome.paid
+                        ? <>Thank you — <strong>{formatMoney(outcome.creditMicros)}</strong> of storytelling has been added to your wallet.</>
+                        : outcome.message}
+                </div>
+            )}
+
             <Balance wallet={wallet} />
 
             {wallet.mode === "credits" && (
                 <section>
-                    <SectionTitle>Add credit</SectionTitle>
+                    <SectionTitle aside={checkout.test ? <span className="text-sm text-ink-faint">test gateway: no card is charged</span> : undefined}>Add credit</SectionTitle>
                     <div className="grid gap-4 sm:grid-cols-3">
                         {packages.map((pkg) => (
                             // a phone lays each card on its side, so the three fit without a long scroll
@@ -33,13 +44,23 @@ export function WalletScreen({ data }: { data: WalletData }) {
                                     <div className="text-sm text-ink-soft">of storytelling</div>
                                     <p className="mt-1 sm:mt-2 font-hand text-xl leading-tight text-moss-deep">{pkg.blurb}</p>
                                 </div>
-                                <div className="w-28 shrink-0 sm:w-auto sm:mt-auto sm:pt-2">
-                                    <TopupButton packageKey={pkg.key} label={`Pay ${formatMoney(pkg.paidCents * 10_000)}`} disabled={provider === null} />
+                                <div className="w-32 shrink-0 sm:w-auto sm:mt-auto sm:pt-2">
+                                    <TopupButton
+                                        packageKey={pkg.key}
+                                        packageName={pkg.name}
+                                        price={checkout.prices[pkg.key] ?? formatMoney(pkg.paidCents * 10_000)}
+                                        disabled={!checkout.available}
+                                        needsCard={checkout.needsCard}
+                                    />
                                 </div>
                             </div>
                         ))}
                     </div>
-                    {provider === null && (
+                    {checkout.available ? (
+                        <p className="mt-3 text-center text-sm text-ink-faint">
+                            Paid by card through PowerTranz. Your bank will ask you to confirm the payment. Credit is added the moment it goes through.
+                        </p>
+                    ) : (
                         <p className="mt-3 text-center text-ink-soft italic">Payments are not set up yet — credit cannot be added just now.</p>
                     )}
                 </section>

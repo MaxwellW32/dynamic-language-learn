@@ -10,9 +10,10 @@ import type { ActorLook } from "@/game/looks";
 import { sanitizeLook } from "@/game/looks";
 import type { BookOverview } from "@/game/payloads";
 import { requireBook, requireUser } from "../auth";
-import { createBook, forgeWorld } from "../services/forge";
+import { createBook } from "../services/forge";
 import { getLearnerView, updateLearner } from "../services/learning";
 import { getOverview } from "../services/overview";
+import { forgeBook } from "../services/story";
 import { attempt, type Result } from "./result";
 
 const id = z.string().min(1).max(64);
@@ -45,11 +46,11 @@ export async function createBookAction(input: unknown): Promise<Result<{ bookId:
     });
 }
 
-/** make the world. Safe to call twice: the second caller finds the forge already claimed and returns at once */
+/** make the world, and begin the story. Safe to call twice: the second caller finds the forge already claimed and returns at once */
 export async function forgeAction(bookId: string): Promise<Result<{ status: string }>> {
     return attempt("forge", async () => {
         const { userId, book } = await requireBook(id.parse(bookId));
-        if (book.status === "forging") await forgeWorld({ userId, bookId: book.id }, book);
+        if (book.status === "forging") await forgeBook({ userId, bookId: book.id }, book);
         const fresh = await db.query.books.findFirst({ where: eq(books.id, book.id) });
         revalidatePath("/");
         return { status: fresh?.status ?? book.status };

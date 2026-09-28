@@ -1,7 +1,7 @@
 import "server-only";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { books, studySessions, type DictEntry, type StudySession } from "@/db/schema";
+import { studySessions, type DictEntry, type StudySession } from "@/db/schema";
 import {
     generateStages, gradeStage,
     type ChallengeType, type StoredStage, type Submission,
@@ -9,9 +9,7 @@ import {
 import type { LangCode } from "@/game/languages";
 import type { StudyAnswer, StudyView } from "@/game/payloads";
 import { cardsFor } from "./dictionary";
-import { chronicle } from "./director";
 import { CONTENT_POS, addXp, distractorsFor, planWords, recordAnswer, toChallengeWord } from "./learning";
-import { applyProgress } from "./quests";
 
 /*
  * The study hall: review sessions built from the same challenge registry as
@@ -113,7 +111,12 @@ export async function getStudy(userId: string, sessionId: string): Promise<Study
     return session ? viewOf(session) : null;
 }
 
+/** what was answered, as kept in the record of attempts; a text column cannot hold a NUL */
 function describeSubmission(submission: Submission): string {
+    return answered(submission).replace(/\u0000/g, "").slice(0, 300);
+}
+
+function answered(submission: Submission): string {
     switch (submission.kind) {
         case "choice":
         case "spelling":
@@ -124,28 +127,6 @@ function describeSubmission(submission: Submission): string {
             return submission.order.join(",");
         case "matching":
             return submission.pairs.map((p) => `${p.left}=${p.right}`).join(",");
-    }
-}
-
-/**
- * Words learned at the desk are learned all the same: they count toward
- * "learn some words" in every book of that language the reader has open. A
- * quest finished this way is written into the book's chronicle, so that the
- * story knows of it when the reader returns.
- */
-async function countTowardQuests(userId: string, lang: string, count: number): Promise<void> {
-    const open = await db.query.books.findMany({
-        where: and(eq(books.userId, userId), eq(books.targetLanguage, lang), eq(books.status, "active")),
-    });
-    for (const book of open) {
-        const updates = await applyProgress(book, { kind: "learnWords", count });
-        for (const update of updates) {
-            if (!update.questCompleted) continue;
-            await chronicle(book, {
-                kind: "quest-done", importance: 5, regionId: book.currentRegionId,
-                summary: `${book.playerName} completed the quest "${update.questTitle}" through quiet study.`,
-            });
-        }
     }
 }
 
@@ -189,7 +170,6 @@ export async function answerStudy(userId: string, sessionId: string, submission:
     if (learnedIds.length > 0) {
         stages[index] = { ...stages[index], result: { correct: grade.correct, learnedIds } };
         await db.update(studySessions).set({ stages }).where(eq(studySessions.id, sessionId));
-        await countTowardQuests(userId, session.lang, learnedIds.length);
     }
 
     const xp = (grade.correct ? XP_PER_CORRECT : 0) + (done ? XP_FOR_FINISHING : 0);

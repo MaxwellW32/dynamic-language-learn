@@ -1,6 +1,6 @@
 import "server-only";
 import { generate, type AiContext } from "../client";
-import { directorSchema, lemmaSchema, reflectionSchema, summarySchema, type Direction } from "../schemas";
+import { lemmaSchema, reflectionSchema, summarySchema } from "../schemas";
 import type { z } from "zod";
 
 /**
@@ -48,61 +48,26 @@ export async function reflect(ctx: AiContext, input: {
     });
 }
 
-/** the director: read what happened, decide what it means for the story */
-export async function direct(ctx: AiContext, input: {
-    bible: string;
-    heart: string;
-    threads: string;
-    quests: string;
-    chronicle: string;
-    cast: string;
-    creatures: string;
-    places: string;
-    landmarks: string;
-    /** whether the story may be handed a further quest right now */
-    mayAddQuest: boolean;
-    cacheKey: string;
-}): Promise<Direction> {
-    return generate({
+/** the last entry in the table of contents: what happened in the chapter that ended the book */
+export async function summarizeChapter(ctx: AiContext, input: {
+    bookTitle: string;
+    chapterTitle: string;
+    playerName: string;
+    happened: string;
+}): Promise<string> {
+    const result = await generate({
         ctx,
-        task: "direct",
+        task: "chapter-summary",
         tier: "scribe",
-        effort: "low",
-        cacheKey: input.cacheKey,
-        maxOutputTokens: 2500,
-        schema: directorSchema,
-        instructions: `You are the director of a living storybook: you never write a word the reader sees. You read what has happened and decide what it means, so that the story remembers its own past and the world answers what the hero does.
+        maxOutputTokens: 500,
+        schema: summarySchema,
+        instructions: `You keep the table of contents of a storybook, "${input.bookTitle}", whose hero is ${input.playerName}. Given what came of each thing a chapter asked of the hero, write what happened in the chapter: two or three past-tense sentences, third person, plain and warm. Say what truly happened, failures and all. Invent nothing.`,
+        input: `THE CHAPTER: "${input.chapterTitle}"
 
-${input.bible}`,
-        input: `What the book is really about: ${input.heart}
-
-OPEN THREADS
-${input.threads || "(none)"}
-
-QUESTS
-${input.quests || "(none)"}
-
-WHAT HAS HAPPENED LATELY, OLDEST FIRST
-${input.chronicle}
-
-PEOPLE
-${input.cast}
-
-CREATURES STILL AT LARGE
-${input.creatures || "(none)"}
-
-PLACES
-${input.places}
-
-LANDMARKS
-${input.landmarks || "(none)"}
-
-Decide:
-- "threads": every thread that changed, and any that has just begun. To update one, give its key and its new summary, status and importance. To open one, give key null. Resolve a thread when the story has answered it; drop one the story has walked away from. Leave unchanged threads out.
-- "shifts": for each person who would be changed by what happened — because they were there, or because word would reach them — their key, and whichever of these changed: "goal" (what they want now), "mood", "heard" (what they have heard, in one sentence in their own words — people talk). Leave unchanged fields null. Leave unaffected people out. People only hear of things that were public or that someone would tell them.
-- "quest": ${input.mayAddQuest ? `if what happened calls for something new — a consequence, a favour asked, a door that opened — one quest: title, description (one or two sentences, second person), "giverKey" (a person key or null), and one to three objectives. Objective kinds and their "targetKey": "talkTo" and "persuade" → a person key; "defeat" → a creature key; "visit" → a place key; "inspect" → a landmark key; "learnWords" → null with "wordCount". Use only keys listed above. Usually null: a story with too many errands has no shape.` : "null."}
-- "note": one or two sentences for the narrator on where the story should lean next.`,
+WHAT CAME OF IT
+${input.happened}`,
     });
+    return result.summary.trim();
 }
 
 /** the dictionary could not place these words: what are their dictionary forms? */
